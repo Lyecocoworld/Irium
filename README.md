@@ -89,7 +89,7 @@ This project builds on five years of technical research: how far a vanilla clien
 
 | | |
 |---|---|
-| Server | Paper / Canvas / Folia plugin, Java 21 |
+| Server | Paper or Folia plugin, Java 21 |
 | Agent | JVM agent (startup + hot attach), ASM, Ed25519 |
 | Security | enrolled servers, signed modules, revocation |
 
@@ -100,7 +100,7 @@ Elastic License 2.0 — see [LICENSE](LICENSE).
 
 Almost everything is open: the plugin, the Microsoft Store app (free), and the Irium API used to write Irium-safe mods or include mods potential into your plugins. You can read, modify, and redistribute all of it, including commercially.
 
-One part is not open: the authentication component of the plugin. It ships as a closed binary, and the license forbids circumventing it. This includes creating or recreating an authentication system, or building any bypass of it — even by modifying the open code. Doing so is a direct violation of the license and of copyright law; the authentication is what protects players from malicious servers. Server enrollment is handled remotely by the platform — validation is free for test and small servers, paid for large ones (which include support and services). Adding or removing a server never requires a code change.
+One part is not open: the authentication component of the plugin. It ships as a closed binary, and the license forbids circumventing it. This includes creating or recreating an authentication system, or building any bypass of it — even by modifying the open code. Doing so is a direct violation of the license and of copyright law; the authentication is what protects players from malicious servers. Server enrollment is handled remotely by the platform — validation is free for test and small servers, paid for large ones (which include support and services).
 
 In short: the code is free, the trust chain is protected.
 
