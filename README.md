@@ -76,14 +76,14 @@ In development — phase 0. Nothing is production-ready yet.
 
 ## Research
 
-This project builds on five years of technical research: how far a vanilla client can be pushed before it needs modification. Full documents (French) in [`docs/research/`](docs/research/):
+This project builds on five years of technical research: how far a vanilla client can be pushed before it needs modification. Full documents in [`docs/research/`](docs/research/):
 
 | Document | Contents |
 |---|---|
-| [`RAPPORT_SDM`](docs/research/RAPPORT_SDM.md) | Escalation levels, classloaders, JVM agents, protocol, server architecture, security |
-| [`RAPPORT_SDM2`](docs/research/RAPPORT_SDM2.md) | Injection rails, ghost versions, hot attach, distribution |
+| [`REPORT_SDM`](docs/research/REPORT_SDM.md) | Escalation levels, classloaders, JVM agents, protocol, server architecture, security |
+| [`REPORT_SDM2`](docs/research/REPORT_SDM2.md) | Injection rails, ghost versions, hot attach, distribution |
 | [`VALIDATION_SDM`](docs/research/VALIDATION_SDM.md) | Lab falsification on JDK 25: premain, retransform, hot attach |
-| [`CONCLUSION_ET_PLAN`](docs/research/CONCLUSION_ET_PLAN.md) | Findings, methodology, MVP roadmap |
+| [`CONCLUSION_AND_PLAN`](docs/research/CONCLUSION_AND_PLAN.md) | Findings, methodology, MVP roadmap |
 
 ## Technology
 

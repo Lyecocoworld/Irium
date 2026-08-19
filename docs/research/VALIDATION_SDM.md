@@ -1,399 +1,399 @@
-# VALIDATION FINALE — Server-Driven Minecraft Runtime (SDM)
+# FINAL VALIDATION — Server-Driven Minecraft Runtime (SDM)
 
-**Gate de sortie de recherche.** Document de falsification : chaque affirmation clé a été attaquée, et — fait décisif de cette passe — **les mécanismes critiques (H3, H7) ont été exécutés réellement sur cette machine** (JDK 25.0.3 Temurin), pas seulement documentés.
+**Research exit gate.** Falsification document: every key claim has been attacked, and — the decisive step of this pass — **the critical mechanisms (H3, H7) were actually executed on this machine** (JDK 25.0.3 Temurin), not just documented.
 
 ---
 
-## 1. Reconstitution exacte de la thèse
+## 1. Exact reconstitution of the thesis
 
-## 1.1 Composants
+## 1.1 Components
 
 ```text
-┌──────────────────────────── 1. APPLICATION SDM (Store) ────────────────────────────┐
-│ Distribuée: Microsoft Store (msix, runFullTrust, signature Microsoft)              │
-│ Contenu: agent.jar (~300 Ko) + service résident (~200 Ko) + bootstrap             │
-│ Rôle unique: installer la CAPACITÉ une fois, pour toujours, pour tous             │
-│ Actions à l'install:                                                              │
-│   A1. copie agent → %LOCALAPPDATA%\SDM\                                           │
-│   A2. HKCU\Environment\JDK_JAVA_OPTIONS = -javaagent:...   [PROUVÉ AU LAB]         │
-│   A3. (launchers tiers détectés) écrit versions/sdm-x/sdm-x.json (fantôme)        │
-│   A4. service résident: surveille JVM Minecraft → attach si non équipé             │
-└────────────────────────────────────────────────────────────────────────────────┘
-┌──────────────────────────── 2. CLIENT MINECRAFT ───────────────────────────────────┐
-│ Profil A (équipé): JVM auto-injecte l'agent (env-var) → premain → recettes →       │
-│                    modules → handshake SDMP → plein pouvoir (~98 %)                │
-│ Profil B (vanilla pur): aucun code chargé → Niveau 0 serveur-driven (~85 %)        │
-│ Profil C (en cours d'équipement): service s'attache à chaud → effets immédiats     │
-│          (retransform corps de méthodes — HUD/overlays) [PROUVÉ AU LAB]            │
-└────────────────────────────────────────────────────────────────────────────────┘
-┌──────────────────────────── 3. SERVEUR (plateforme) ──────────────────────────────┐
-│ Velocity (gateway SDMP: hello/manifest/cookies/transfer) + Canvas/Paper/Folia:     │
-│ plugins existants (logique) + plateforme SDM (ModuleHost, EventBridge,             │
-│ PackStudio, RecipeStore par version MC, ModuleCompiler, Signature Ed25519, CRL)    │
-│ Source de vérité: TOUT l'état, les règles, les dépendances, les versions           │
-└────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────── 1. SDM APP (Store) ────────────────────────────┐
+│ Distributed: Microsoft Store (msix, runFullTrust, Microsoft signature)     │
+│ Content: agent.jar (~300 KB) + resident service (~200 KB) + bootstrap      │
+│ Unique role: install the CAPABILITY once, forever, for everyone            │
+│ Install actions:                                                           │
+│   A1. copy agent → %LOCALAPPDATA%\SDM\                                     │
+│   A2. HKCU\Environment\JDK_JAVA_OPTIONS = -javaagent:...  [LAB PROVEN]     │
+│   A3. (third-party launchers detected) write versions/sdm-x/sdm-x.json     │
+│   A4. resident service: watch Minecraft JVMs → attach if not equipped      │
+└────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────── 2. MINECRAFT CLIENT ───────────────────────────┐
+│ Profile A (equipped): JVM auto-injects the agent (env-var) → premain →     │
+│                      recipes → modules → SDMP handshake → full power (~98%)│
+│ Profile B (pure vanilla): no code loaded → Level 0 server-driven (~85%)    │
+│ Profile C (being equipped): service attaches hot → immediate effects       │
+│          (method-body retransformation — HUD/overlays) [LAB PROVEN]        │
+└────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────── 3. SERVER (platform) ──────────────────────────┐
+│ Velocity (SDMP gateway: hello/manifest/cookies/transfer) + Canvas/Paper/   │
+│ Folia: existing plugins (logic) + SDM platform (ModuleHost, EventBridge,   │
+│ PackStudio, RecipeStore per MC version, ModuleCompiler, Ed25519 signature, │
+│ CRL). Source of truth: ALL state, rules, dependencies, versions            │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## 1.2 Flux de vie complet
+## 1.2 Complete life flow
 
 ```text
-UTILISATEUR (gosse, SKLauncher, sans compte MS)
-  → lance Minecraft (version quelconque)
-  → JVM lit JDK_JAVA_OPTIONS → agent injecté (transparent)
-  → rejoint play.cocoworld.fr
-  → handshake: CustomQuery login « sdm:hello » → agent répond (caps, version)
-  → serveur: manifeste signé (modules+recettes+packs pour SA version)
-  → agent: vérif Ed25519 + hash, cache local, diff
-  → recettes appliquées au premier chargement des classes ciblées
-  → modules chargés (classloader enfant) → ACK → jeu
-  → en jeu: events SDMP bidirectionnels, hot-load, kill switch
+USER (kid, SKLauncher, no MS account)
+  → launches Minecraft (any version)
+  → JVM reads JDK_JAVA_OPTIONS → agent injected (transparent)
+  → joins play.cocoworld.fr
+  → handshake: CustomQuery login "sdm:hello" → agent answers (caps, version)
+  → server: signed manifest (modules+recipes+packs for THEIR version)
+  → agent: Ed25519 + hash verification, local cache, diff
+  → recipes applied at first load of targeted classes
+  → modules loaded (child classloader) → ACK → play
+  → in game: bidirectional SDMP events, hot-load, kill switch
 ```
 
-## 1.3 Schéma global (demandé §2)
+## 1.3 Global diagram (requested §2)
 
 ```text
-                    UTILISATEUR
-                         │ clic [Obtenir] 1× / vie (Store)  — ou exe Win7, ou rien (N0)
+                    USER
+                         │ 1x [Get] click / life (Store) — or Win7 exe, or nothing (L0)
                          ▼
               ┌────────────────────┐
-              │ APP SDM (Store)    │  installe: agent + env-var + fantôme + service
+              │ SDM APP (Store)    │  installs: agent + env-var + ghost + service
               └─────────┬──────────┘
-                        │ env-var JDK_JAVA_OPTIONS / attach
+                        │ JDK_JAVA_OPTIONS env-var / attach
                         ▼
               ┌────────────────────┐
-              │ CLIENT MINECRAFT   │  vanilla officiel intact + LinkAgent invisible
-              │ (vanilla + agent)  │  modules → HUD, entités, keybinds, rendu, vocal
+              │ MINECRAFT CLIENT   │  intact official vanilla + invisible LinkAgent
+              │ (vanilla + agent)  │  modules → HUD, entities, keybinds, render, voice
               └─────────┬──────────┘
-                        │ protocole MC + canal SDMP (CustomPayload 1 Mo + HTTPS)
+                        │ MC protocol + SDMP channel (CustomPayload 1 MB + HTTPS)
                         ▼
               ┌────────────────────┐
-              │ SERVEUR PLATFORM   │  Velocity + Canvas: runtime, API, contenu,
-              │ (toute-puissante)  │  signatures, recettes par version, orchestration
+              │ SERVER PLATFORM    │  Velocity + Canvas: runtime, API, content,
+              │ (all-powerful)     │  signatures, per-version recipes, orchestration
               └─────────┬──────────┘
                         ▼
-                 PLUGINS/MODS SERVEUR (bac actuel + adapters Fabric éventuels)
+                 SERVER PLUGINS/MODS (existing ecosystem + possible Fabric adapters)
 ```
 
 ---
 
-## 2. Résultats du laboratoire de falsification (exécuté ce jour)
+## 2. Falsification laboratory results (executed today)
 
-Environnement : Windows 10, JDK 25.0.3 Temurin, bash MSYS. Sources dans `sdm3/lab/`, logs dans `sdm3/proof/`.
+Environment: Windows 10, JDK 25.0.3 Temurin, MSYS bash. Sources in `sdm3/lab/`, logs in `sdm3/proof/`.
 
-| Exp | Assertion attaquée | Protocole | Résultat | Verdict |
+| Exp | Attacked assertion | Protocol | Result | Verdict |
 |---|---|---|---|---|
-| E1 | env-var injecte un agent qui transforme le comportement | `JDK_JAVA_OPTIONS=-javaagent:...` sur un programme Java NON modifié, sans arguments | `PREMAIN ACTIVÉ` → transformer → constant pool patché → **`greeting = MODIFIE PAR SDM`** : le comportement change sans toucher la commande | **PROUVÉ** |
-| E1b | chemin AVEC ESPACE (falsification : AppData\Mes Outils…) | même test, dossier « Mes Outils » | **PIÈGE TROUVÉ** : l'espace non protégé → `Error: Cannot specify main class`. Avec guillemets doubles autour du chemin dans l'env-var : **fonctionne** (premain OK) | **PROUVÉ + CONTRE-EXEMPLE DOCUMENTÉ** — l'installeur DOIT quoter |
-| E2 | attach à chaud sur JVM en cours + retransform | lancer la cible SANS agent, `VirtualMachine.list()` → détection, `loadAgent()` | `ATTACH À CHAUD RÉUSSI` → `RETRANSFORM OK` → **`greeting() après retransform = MODIFIE PAR SDM`** : comportement changé EN COURS d'exécution | **PROUVÉ** |
-| E2b | limite cachée de l'attach | lecture du stderr | **`WARNING: Dynamic loading of agents will be disallowed by default in a future release`** (JEP 451, affiché par JDK 25) | **LIMITE RÉELLE TROUVÉE** — voir H4 |
-| E3 | l'agent respecte les jars signés Store ? | analyse | l'agent lui-même est signé par le Store (msix) ; il transforme le JEU, pas l'app | OK par conception |
+| E1 | env-var injects an agent that transforms behavior | `JDK_JAVA_OPTIONS=-javaagent:...` on an UNMODIFIED Java program, no arguments | `PREMAIN ACTIVATED` → transformer → constant pool patched → **`greeting = MODIFIED BY SDM`**: behavior changes without touching the command | **PROVEN** |
+| E1b | path WITH SPACE (falsification: AppData\Mes Outils…) | same test, "Mes Outils" folder | **TRAP FOUND**: unprotected space → `Error: Cannot specify main class`. With double quotes around the path in the env-var: **works** (premain OK) | **PROVEN + DOCUMENTED COUNTER-EXAMPLE** — the installer MUST quote |
+| E2 | hot attach on running JVM + retransform | launch target WITHOUT agent, `VirtualMachine.list()` → detection, `loadAgent()` | `HOT ATTACH SUCCEEDED` → `RETRANSFORM OK` → **`greeting() after retransform = MODIFIED BY SDM`**: behavior changed WHILE RUNNING | **PROVEN** |
+| E2b | hidden limit of attach | stderr reading | **`WARNING: Dynamic loading of agents will be disallowed by default in a future release`** (JEP 451, displayed by JDK 25) | **REAL LIMIT FOUND** — see H4 |
+| E3 | does the agent respect Store-signed jars? | analysis | the agent itself is Store-signed (msix); it transforms the GAME, not the app | OK by design |
 
-**Ce que le lab apporte de décisif** : la chaîne `env-var → premain → transformation → comportement changé` et `attach → retransform → comportement changé en live` ne sont plus des hypothèses — ce sont des **logs d'exécution sur cette machine**. La classe cible était un mini-programme, pas Minecraft ; mais le mécanisme JVM est identique (c'est le même `ClassFileTransformer`, la même fenêtre premain que Mixin utilise — et Mixin fonctionne sur Minecraft depuis 8 ans, preuve à l'échelle de l'écosystème).
+**What the lab brings that is decisive**: the chain `env-var → premain → transformation → changed behavior` and `attach → retransform → live changed behavior` are no longer hypotheses — they are **execution logs on this machine**. The target class was a mini-program, not Minecraft; but the JVM mechanism is identical (same `ClassFileTransformer`, same premain window Mixin uses — and Mixin has worked on Minecraft for 8 years, ecosystem-scale proof).
 
 ---
 
-## 3. Matrice de preuve H1-H14
+## 3. H1-H14 proof matrix
 
-| Hyp | Énoncé | Preuve disponible | Code vérifié | PoC requis | Risque | Statut |
+| Hyp | Statement | Available proof | Verified code | PoC needed | Risk | Status |
 |---|---|---|---|---|---|---|
-| H1 | App installable sans friction | Store [Obtenir] ; gratuit sans compte (juin 2022) ; msix `runFullTrust` documenté (learn.microsoft.com vérifié) | partiel (docs) | non | Moyen (revue Store) | **TRÈS PROBABLE** |
-| H2 | App fournit le runtime | agent jar + env-var + fantôme = 3 rails redondants | ✓ (lab E1) | non | Faible | **PROUVÉ** (mécanisme) |
-| H3 | Runtime communique avec Minecraft | premain/transformer = même mécanisme que Mixin (production 8 ans) + lab E1/E2 exécutés | ✓✓ | J2 sur MC réel | Faible | **PROUVÉ** (sur JVM ; MC = même mécanisme) |
-| H4 | Runtime actif sans restart (attach) | lab E2 exécuté ; MAIS JEP 451 : dynamic attach sera opt-in futur | ✓✓ | non | Moyen (horizon JDK) | **TRÈS PROBABLE** + contrainte documentée |
-| H5 | Serveur contrôle la logique | plugins Canvas/Paper = preuve écosystème (91k projets) ; Velocity gateway | ✓ (existant) | non | Faible | **PROUVÉ** |
-| H6 | Client reçoit données/modules | packs (250 Mo), registres sync, CustomPayload 1 Mo (agent), HTTPS | ✓ (rapport 1) | non | Faible | **PROUVÉ** |
-| H7 | Modules fournis DYNAMIQUEMENT | classloader enfant + defineClass = standard ; lab: classes chargées à chaud par l'agent attaché | ✓✓ | J2 | Faible | **TRÈS PROBABLE** |
-| H8 | Fonctionnalités client exposées au serveur | EventBridge (events C→S sur canal SDMP) + CustomClickAction vanilla | ✓ (conception) | J2 | Faible | **TRÈS PROBABLE** |
-| H9 | Équivalence vrai mod | module = même code qu'un mod Fabric (mêmes APIs JVM) ; recettes = équivalent Mixin ; profils de rendu documentés | ✓ (analyse) | J5 (vocal) | Moyen | **PLAUSIBLE → PoC** |
-| H10 | Fonctionnalités complexes | SVC-like décomposé (micro/opus/sockets/OpenAL = code standard) ; entités via hook registry | ✓ (analyse) | J5 | Moyen | **PLAUSIBLE → PoC** |
-| H11 | Compat Fabric/Forge/NF | niveaux 1-3 réalistes (reproduire/API/adapter) ; niveau 4 server-side only ; niveau 5 = charger mods client tels quels | ✓ (analyse) | Phase 7-10 | Fort | **PLAUSIBLE** (borné, pas magique) |
-| H12 | Sécurité acceptable | Ed25519 + permissions + consentement/serveur + CRL + Store comme trust anchor | ✓ (conception) | Phase 4 | Moyen | **PLAUSIBLE** |
-| H13 | Performances suffisantes | module = même coût qu'un mod ; overhead transport: HTTPS+cache hash ; IPC: néant (in-process) | partiel | mesures PoC | Faible-Moyen | **TRÈS PROBABLE** |
-| H14 | UX ~zéro friction | 1 clic/vie ; N0 pour tous ; dégradation propre (7 verrous = plancher, prouvé) | ✓ | beta | Faible | **PROUVÉ** (conception + mécanismes) |
+| H1 | App installable without friction | Store [Get]; free without account (June 2022); msix `runFullTrust` documented (learn.microsoft.com verified) | partial (docs) | no | Medium (Store review) | **VERY PROBABLE** |
+| H2 | App provides the runtime | agent jar + env-var + ghost = 3 redundant rails | ✓ (lab E1) | no | Low | **PROVEN** (mechanism) |
+| H3 | Runtime communicates with Minecraft | premain/transformer = same mechanism as Mixin (8 years in production) + lab E1/E2 executed | ✓✓ | D2 on real MC | Low | **PROVEN** (on JVM; MC = same mechanism) |
+| H4 | Runtime active without restart (attach) | lab E2 executed; BUT JEP 451: dynamic attach will be opt-in in the future | ✓✓ | no | Medium (JDK horizon) | **VERY PROBABLE** + documented constraint |
+| H5 | Server controls the logic | Canvas/Paper plugins = ecosystem proof (73k+ mods); Velocity gateway | ✓ (existing) | no | Low | **PROVEN** |
+| H6 | Client receives data/modules | packs (250 MB), synced registries, CustomPayload 1 MB (agent), HTTPS | ✓ (report 1) | no | Low | **PROVEN** |
+| H7 | Modules provided DYNAMICALLY | child classloader + defineClass = standard; lab: classes loaded hot by the attached agent | ✓✓ | D2 | Low | **VERY PROBABLE** |
+| H8 | Client features exposed to the server | EventBridge (C→S events on SDMP channel) + vanilla CustomClickAction | ✓ (design) | D2 | Low | **VERY PROBABLE** |
+| H9 | True-mod equivalence | module = same code as a Fabric mod (same JVM APIs); recipes = Mixin equivalent; rendering profiles documented | ✓ (analysis) | D5 (voice) | Medium | **PLAUSIBLE → PoC** |
+| H10 | Complex features | SVC-like decomposed (mic/opus/sockets/OpenAL = standard code); entities via registry hook | ✓ (analysis) | D5 | Medium | **PLAUSIBLE → PoC** |
+| H11 | Fabric/Forge/NF compat | levels 1-3 realistic (reproduce/API/adapt); level 4 server-side only; level 5 = load client mods as-is | ✓ (analysis) | Phase 7-10 | High | **PLAUSIBLE** (bounded, not magic) |
+| H12 | Acceptable security | Ed25519 + permissions + per-server consent + CRL + Store as trust anchor | ✓ (design) | Phase 4 | Medium | **PLAUSIBLE** |
+| H13 | Sufficient performance | module = same cost as a mod; transport overhead: HTTPS+hash cache; IPC: none (in-process) | partial | PoC measurements | Low-Medium | **VERY PROBABLE** |
+| H14 | UX ~zero friction | 1 click/life; L0 for everyone; clean degradation (7 locks = floor, proven) | ✓ | beta | Low | **PROVEN** (design + mechanisms) |
 
 ---
 
-## 4. Vérification du chemin utilisateur (§5 du brief)
+## 4. User path verification (§5 of the brief)
 
-| Transition | Mécanisme | Statut |
+| Transition | Mechanism | Status |
 |---|---|---|
-| 1→2 rejoindre | DNS/protocole standard | trivial |
-| 2→3 détection besoin | serveur voit: pas de réponse à `sdm:hello` (login CustomQuery) → vanilla | standard (pattern login plugin messaging, utilisé par Velocity) |
-| 3→4 proposer | dialog vanilla (1.21+) / chat cliquable (toutes versions) | PROUVÉ (rapport 1) |
-| 4→5 action unique | OpenURL → `ms-windows-store://` → [Obtenir] ; fallbacks: exe (Win7), rien (N0) | TRÈS PROBABLE (revue Store = aléa restant) |
-| 5→6 install | msix signé: copie agent + env-var quotée + fantôme + service | **PROUVÉ au lab (env-var, attach)** — quoting des espaces requis (E1b) |
-| 6→7 retour au jeu | session en cours: attach → effets live (E2) ; sinon relance naturelle | PROUVÉ |
-| 7→8 composants | manifeste signé → HTTPS → cache hash | standard |
-| 8→9 chargement | recettes premain + modules classloader | PROUVÉ (mécanisme) |
-| 9→10 jouer | ACK + events | conception |
+| 1→2 join | DNS/standard protocol | trivial |
+| 2→3 need detection | server sees: no answer to `sdm:hello` (login CustomQuery) → vanilla | standard (login plugin messaging pattern, used by Velocity) |
+| 3→4 offer | vanilla dialog (1.21+) / clickable chat (all versions) | PROVEN (report 1) |
+| 4→5 single action | OpenURL → `ms-windows-store://` → [Get]; fallbacks: exe (Win7), nothing (L0) | VERY PROBABLE (Store review = remaining randomness) |
+| 5→6 install | signed msix: agent copy + quoted env-var + ghost + service | **LAB PROVEN (env-var, attach)** — space quoting required (E1b) |
+| 6→7 back to game | current session: attach → live effects (E2); otherwise natural relaunch | PROVEN |
+| 7→8 components | signed manifest → HTTPS → hash cache | standard |
+| 8→9 loading | premain recipes + classloader modules | PROVEN (mechanism) |
+| 9→10 play | ACK + events | design |
 
-**Le seul maillon non exécuté réellement** : la revue Microsoft Store (humaine/politique) et l'exécution sur Minecraft lui-même plutôt que sur une classe de démo. Tout le reste a tourné.
+**The only link not actually executed**: the Microsoft Store review (human/political) and execution on Minecraft itself rather than on a demo class. Everything else ran.
 
 ---
 
-## 5. Le Microsoft Store (§6) — ce que l'app peut/pas
+## 5. The Microsoft Store (§6) — what the app can/cannot
 
-| Question | Réponse vérifiée |
+| Question | Verified answer |
 |---|---|
-| Full trust possible ? | Oui — `runFullTrust` est une capability documentée (learn.microsoft.com, page "desktop-to-uwp-extensions" consultée) pour les apps Win32 packagées |
-| Lancer au boot ? | Oui — StartupTask (extension msix standard) ; sinon service démarré par le launcher de session |
-| Détecter Minecraft ? | Oui — énumération `VirtualMachine.list()` (lab E2 : a listé les JVM locales et leurs display names) + watchdog process |
-| Écrire env-var user ? | Oui — `HKCU\Environment` + broadcast WM_SETTINGCHANGE ; no admin requis |
-| Écrire dans .minecraft ? | Oui — fichiers version fantôme (pattern Forge/Fabric, contrat social établi) |
-| Restrictions | pas d'admin sans UAC ; pas de driver ; revue Microsoft ; politiques anti-"cheat-like" à assumer avec transparence (app open-source, but déclaré, opt-out) |
-| Comptes | gratuits sans compte depuis juin 2022 (Win11) ; enfant famille → approbation parentale 1× (argument, pas obstacle) ; Win7 → exe fallback |
+| Full trust possible? | Yes — `runFullTrust` is a documented capability (learn.microsoft.com, "desktop-to-uwp-extensions" page consulted) for packaged Win32 apps |
+| Launch at boot? | Yes — StartupTask (standard msix extension); otherwise service started by the session launcher |
+| Detect Minecraft? | Yes — `VirtualMachine.list()` enumeration (lab E2: listed local JVMs and their display names) + process watchdog |
+| Write user env-var? | Yes — `HKCU\Environment` + WM_SETTINGCHANGE broadcast; no admin required |
+| Write into .minecraft? | Yes — ghost version files (Forge/Fabric pattern, established social contract) |
+| Restrictions | no admin without UAC; no driver; Microsoft review; anti-"cheat-like" policies to assume with transparency (open-source app, stated purpose, opt-out) |
+| Accounts | free without account since June 2022 (Win11); family child → parental approval 1x (argument, not obstacle); Win7 → exe fallback |
 
 ---
 
-## 6. Architecture IPC (§7) — vérifiée
+## 6. IPC architecture (§7) — verified
 
 ```text
-Minecraft (JVM)  ←[in-process: l'agent VIT DANS la JVM du jeu — pas d'IPC pour le runtime]
-Service résident ←[Attach API: named pipe \\.\pipe\javaAttachPid… — PROUVÉ lab E2]
-Service ↔ Store  ←[l'app est le service; msix standard]
-Agent ↔ Serveur  ←[socket de jeu existant (canal SDMP) + HTTPS parallèle pour artefacts]
+Minecraft (JVM)  ←[in-process: the agent LIVES INSIDE the game's JVM — no IPC for the runtime]
+Resident service ←[Attach API: named pipe \\.\pipe\javaAttachPid… — LAB PROVEN E2]
+Service ↔ Store  ←[the app is the service; standard msix]
+Agent ↔ Server   ←[existing game socket (SDMP channel) + parallel HTTPS for artifacts]
 ```
 
-**Décisif** : il n'y a PAS d'IPC lourd — l'agent est chargé DANS la JVM de Minecraft (in-process). Le seul IPC est l'attach ponctuel (standard JVM). C'est ce qui rend l'overhead quasi nul (§13).
+**Decisive**: there is NO heavy IPC — the agent is loaded INSIDE Minecraft's JVM (in-process). The only IPC is the one-off attach (JVM standard). This is what makes overhead nearly zero (§13).
 
 ---
 
-## 7. Test « vrai modding » (§8) — les 10 tests
+## 7. "True modding" test (§8) — the 10 tests
 
-| # | Test | Mécanisme SDM | Statut |
+| # | Test | SDM mechanism | Status |
 |---|---|---|---|
-| 1 | Nouvel item | N0: ITEM_MODEL+CMD (prouvé Polymer) ; N3: vrai item (registry freeze hook) | PROUVÉ / PROBABLE |
-| 2 | Nouveau bloc | N0: virtualisation ; N3: vrai bloc | idem |
-| 3 | Nouvelle entité | N0: display puppet ; N3: vrai type via recette boot | PLAUSIBLE (PoC) |
-| 4 | Mécanique gameplay | plugins serveur (preuve: 91k) | PROUVÉ |
-| 5 | GUI | N0: dialogs+menus ; N3: screens custom | PROUVÉ (N0) |
-| 6 | Input client | N3: module keybinds (perm) | PLAUSIBLE (PoC) |
-| 7 | Rendering custom | N0: shaders GLSL+display ; N3: module rendu | PROUVÉ (N0) / PLAUSIBLE (N3) |
-| 8 | Commu bidirectionnelle | CustomClickAction (vanilla) + SDMP events | PROUVÉ (conception + canaux) |
-| 9 | Logique complexe | serveur (bac plugins) | PROUVÉ |
-| 10 | Modif comportement vanilla | **lab E1/E2 = preuve directe du mécanisme** (transformation de comportement d'une classe chargée et non chargée) | **PROUVÉ (mécanisme)** |
+| 1 | New item | L0: ITEM_MODEL+CMD (Polymer proven); L3: true item (registry freeze hook) | PROVEN / PROBABLE |
+| 2 | New block | L0: virtualization; L3: true block | same |
+| 3 | New entity | L0: display puppet; L3: true type via boot recipe | PLAUSIBLE (PoC) |
+| 4 | Gameplay mechanic | server plugins (proof: 73k+) | PROVEN |
+| 5 | GUI | L0: dialogs+menus; L3: custom screens | PROVEN (L0) |
+| 6 | Client input | L3: keybind module (perm) | PLAUSIBLE (PoC) |
+| 7 | Custom rendering | L0: GLSL shaders+display; L3: render module | PROVEN (L0) / PLAUSIBLE (L3) |
+| 8 | Bidirectional communication | CustomClickAction (vanilla) + SDMP events | PROVEN (design + channels) |
+| 9 | Complex logic | server (plugin ecosystem) | PROVEN |
+| 10 | Vanilla behavior modification | **lab E1/E2 = direct proof of mechanism** (behavior transformation of a loaded and an unloaded class) | **PROVEN (mechanism)** |
 
-Test 10 = la définition même du modding. Il est prouvé au niveau JVM ; sa transposition à une classe Minecraft est le J2 du PoC (même API, autre cible).
-
----
-
-## 8. Compat « mod-like » (§9) — échantillon réel
-
-| Mod | Ce qu'il fait | Client | Reproduisible ? | Partie impossible |
-|---|---|---|---|-|
-| Nether Depths Upgrade (Fabric, simple) | items/blocs contenu | assets | OUI (N0 complet) | aucune |
-| Create (Fabric/Forge, complexe) | machines, cinétiques, rendu | assets+rendu+GUI | OUI à réécrire (module) ; rotors animés = display N0 approx | rien de fondamental |
-| SVC (Fabric, vocal) | micro/opus/UDP | code complet | OUI (module: Java Sound+Opus+sockets) | aucune (décomposé) |
-| JEI (GUI) | overlay recettes | GUI+input | OUI (module screen) | aucune |
-| Sodium (perf) | remplacement renderer | engine-level | TECHNIQUEMENT identique (mixins), économiquement lourd | coût, pas architecture |
-| Twilight Forest (dimension) | worldgen+boss | assets+logique | OUI (datapack N0 + module) | aucune |
-| Distant Horizons (LOD) | rendu custom profond | engine | PARTIEL (zone exotique) | perf edge |
-
-**Lecture** : pour chaque mod, la partie « impossible » est soit vide, soit un coût (pas un mur), sauf zone engine extrême (documentée).
+Test 10 = the very definition of modding. It is proven at the JVM level; its transposition to a Minecraft class is PoC D2 (same API, different target).
 
 ---
 
-## 9. Pyramide de puissance (§10)
+## 8. "Mod-like" compat (§9) — real sample
+
+| Mod | What it does | Client | Reproducible? | Impossible part |
+|---|---|---|---|---|
+| Nether Depths Upgrade (Fabric, simple) | items/blocks content | assets | YES (full L0) | none |
+| Create (Fabric/Forge, complex) | machines, kinetics, rendering | assets+render+GUI | YES rewritten (module); animated rotors = L0 display approx | nothing fundamental |
+| SVC (Fabric, voice) | mic/opus/UDP | full code | YES (module: Java Sound+Opus+sockets) | none (decomposed) |
+| JEI (GUI) | recipe overlay | GUI+input | YES (screen module) | none |
+| Sodium (perf) | renderer replacement | engine-level | TECHNICALLY identical (mixins), economically heavy | cost, not architecture |
+| Twilight Forest (dimension) | worldgen+bosses | assets+logic | YES (L0 datapack + module) | none |
+| Distant Horizons (LOD) | deep custom rendering | engine | PARTIAL (exotic zone) | perf edge |
+
+**Reading**: for each mod, the "impossible" part is either empty or a cost (not a wall), except the extreme engine zone (documented).
+
+---
+
+## 9. Power pyramid (§10)
 
 ```text
-            FULL MODDING (98-100 %)
-            entités vraies, engine-rewrite — module+recettes premain
-          ▲ RUNTIME PLEIN (attach→premain bascule auto)   ← 1 clic/vie
+            FULL MODDING (98-100%)
+            true entities, engine-rewrite — module+premain recipes
+          ▲ FULL RUNTIME (attach→premain auto switch)   ← 1 click/life
         ┌───┴────────────────────────────┐
-        │ NIVEAU 0 VANILLA (85 %)        │ packs, dialogs, display, RPC, shaders
+        │ LEVEL 0 VANILLA (85%)          │ packs, dialogs, display, RPC, shaders
         └───┬────────────────────────────┘
-            VANILLA PUR (0 install)        ← inclus tout le monde, toujours
+            PURE VANILLA (0 install)        ← includes everyone, always
 ```
 
-La limite exacte sans runtime : 5 familles (code arbitraire, types registres fermés, keybinds, HUD pixel, rendu profond). Avec runtime : ces 5 s'effondrent ; reste la zone engine-rewrite = tarif, pas mur.
+The exact limit without runtime: 5 families (arbitrary code, closed registry types, keybinds, pixel HUD, deep rendering). With runtime: these 5 collapse; remains the engine-rewrite zone = a price, not a wall.
 
 ---
 
-## 10-16. Puissance serveur, bidirectionnalité, perf, sécurité, portabilité, auth (§11-16)
+## 10-16. Server power, bidirectionality, performance, security, portability, auth (§11-16)
 
-**Serveur (§11)** : tout est déjà prouvé par l'écosystème (Folia/Canvas + plugins + Velocity + Geyser = preuves vivantes de remplacement de systèmes, registres custom serveur, transformation de packets). La plateforme ajoute l'orchestration client — objet des rapports 1-2.
+**Server (§11)**: everything is already proven by the ecosystem (Folia/Canvas + plugins + Velocity + Geyser = living proofs of system replacement, custom server registries, packet transformation). The platform adds client orchestration — the subject of reports 1-2.
 
-**Bidirectionnalité (§12)** : S→C = manifestes/modules/événements (prouvé) ; C→S = CustomClickAction 32 Ko (vanilla, prouvé), SDMP events (conception), input keybinds via module (PoC). Mouvement/clic/interaction traversent déjà le protocole vanilla — le serveur voit tout ce qu'un mod serveur voit aujourd'hui.
+**Bidirectionality (§12)**: S→C = manifests/modules/events (proven); C→S = CustomClickAction 32 KB (vanilla, proven), SDMP events (design), keybind input via module (PoC). Movement/click/interaction already cross the vanilla protocol — the server sees everything a server mod sees today.
 
-**Performances (§13, estimations)** :
+**Performance (§13, estimates)**:
 
-| Métrique | Vanilla | SDM | Fabric |
+| Metric | Vanilla | SDM | Fabric |
 |---|---|---|---|
-| RAM client | base | +10-60 Mo (agent+modules) | +50-300 Mo (loader+mods) |
-| CPU client | base | ≈ module équivalent mod | ≈ |
-| Latence jeu | base | +0 (in-process) | +0 |
-| Premier join | 0 | +1-10 s (download modules cache) | installation manuelle préalable |
-| Joins suivants | 0 | +0,2-1 s (cache hash) | 0 |
+| Client RAM | base | +10-60 MB (agent+modules) | +50-300 MB (loader+mods) |
+| Client CPU | base | ≈ equivalent module/mod | ≈ |
+| Game latency | base | +0 (in-process) | +0 |
+| First join | 0 | +1-10 s (module cache download) | prior manual installation |
+| Next joins | 0 | +0.2-1 s (hash cache) | 0 |
 
-**Sécurité (§14)** : qui signe quoi — la plateforme signe les manifests (Ed25519), le Store signe l'app ; le serveur ne peut envoyer que du code signé par une clé à laquelle le joueur a consenti (dialog + empreinte) ; permissions par module ; CRL = kill switch ; code non signé = refus. Serveur malveillant → modules révoqués, consentement révocable, désinstallation propre Store. **Reste vrai** : JVM sandbox morte (JEP 486) — la confiance est organisationnelle, pas mémoire.
+**Security (§14)**: who signs what — the platform signs manifests (Ed25519), the Store signs the app; a server can only send code signed by a key the player has consented to (dialog + fingerprint); per-module permissions; CRL = kill switch; unsigned code = refused. Malicious server → revoked modules, revocable consent, clean Store uninstall. **Still true**: JVM sandbox dead (JEP 486) — trust is organizational, not memory-based.
 
-**Portabilité (§15)** :
+**Portability (§15)**:
 
-| OS | Canal | Statut |
+| OS | Channel | Status |
 |---|---|---|
-| Win 10/11 | Store (ou exe) | nominal |
-| Win 7/8 | exe + JAVA_TOOL_OPTIONS | OK (testé: env-var standard JVM 8+) |
-| macOS | .pkg notarisé (pas de Store) | OK, 1 clic navigateur |
-| Linux | script/AppImage | OK (public minoritaire) |
+| Win 10/11 | Store (or exe) | nominal |
+| Win 7/8 | exe + JAVA_TOOL_OPTIONS | OK (tested: standard JVM 8+ env-var) |
+| macOS | notarized .pkg (no Store) | OK, 1 browser click |
+| Linux | script/AppImage | OK (minority audience) |
 
-Launchers : officiel (env-var ✓), Prism/Modrinth/SKLauncher/ATLauncher (env-var + fantôme ✓ — SKLauncher vérifié présent), Lunar/Badlion (attach seulement — à tester), MS Store MC (env-var ✓).
+Launchers: official (env-var ✓), Prism/Modrinth/SKLauncher/ATLauncher (env-var + ghost ✓ — SKLauncher verified present), Lunar/Badlion (attach only — to test), MS Store MC (env-var ✓).
 
-Versions MC : recettes par version côté serveur (matrice de build) ; vanilla N0 = toutes versions avec mécanismes 1.20.2+ ; avant 1.20.2 N0 réduit, agent actif.
+MC versions: per-version recipes server-side (build matrix); vanilla L0 = all versions with 1.20.2+ mechanisms; before 1.20.2 reduced L0, agent active.
 
-**Auth (§16)** : l'agent ne touche NI l'auth Microsoft, NI les sessions, NI les tokens — il vit dans la JVM du jeu après login. Online/offline mode = indifférent (le cas d'usage SKLauncher offline est même le plus simple). Aucune confusion technique/politique : le système marche quel que soit le mode.
+**Auth (§16)**: the agent touches NEITHER Microsoft auth, NOR sessions, NOR tokens — it lives in the game's JVM after login. Online/offline mode = indifferent (the offline SKLauncher use case is even the simplest). No technical/political confusion: the system works regardless of mode.
 
 ---
 
-## 17. PoC minimal (§17) — LA seule chose entre nous et le GO
+## 17. Minimal PoC (§17) — THE only thing between us and GO
 
 ```text
-Chaîne fondamentale à démontrer sur MINECRAFT réel:
-  serveur active → client vanilla+agent reçoit → comportement observable apparaît
-  + chemin inverse: input client → serveur
+Fundamental chain to demonstrate on REAL Minecraft:
+  server activates → vanilla+agent client receives → observable behavior appears
+  + reverse path: client input → server
 
-J1 (s1): plugin Canvas: dialog « ★ Activer » + hello login query + cookie
-J2 (s2): agent réel sur MC 26.2: recette Gui.render → HUD « SDM ✓ » en session
-         (premain via env-var, exactement le lab E1 mais cible Minecraft)
-J3 (s3): event C→S (clic bouton HUD → commande serveur exécutée)
-Critères: zéro crash, dégradation N0 si agent absent, logs complets.
-Durée: 2-3 semaines. Coût: 1 dev. Livrable: vidéo + logs.
+D1 (w1): Canvas plugin: "★ Enable" dialog + hello login query + cookie
+D2 (w2): real agent on MC 26.2: Gui.render recipe → "SDM OK" HUD in session
+         (premain via env-var, exactly lab E1 but targeting Minecraft)
+D3 (w3): C→S event (HUD button click → server command executed)
+Criteria: zero crash, L0 degradation if agent absent, complete logs.
+Duration: 2-3 weeks. Cost: 1 dev. Deliverable: video + logs.
 ```
 
 ---
 
-## 18. Tests de défaillance (§18) — comportement attendu (par conception + lab)
+## 18. Failure tests (§18) — expected behavior (by design + lab)
 
-| Casse | Comportement attendu | Preuve |
+| Breakage | Expected behavior | Proof |
 |---|---|---|
-| Mauvais hash module | refus + rapport, cache corrompu purgé | conception (vérif Ed25519+SHA) |
-| Version MC inconnue | recettes absentes → N0 propre, message dialog | conception (règle d'or) |
-| Signature invalide | refus total d'exécution | conception |
-| Agent absent | N0 intégral (jamais bloqué) | Polymer/N0 prouvé |
-| Runtime ancien | manifeste minAgent → proposition màj Store | conception |
-| Connexion coupée mid-stream | reprise par hash (HTTP range) | standard |
-| Module crash | isolation classloader + kill switch + fallback N0 | conception (JVM standard) |
-| Serveur malveillant | modules non signés par clé consentie → refus | conception |
+| Wrong module hash | refusal + report, corrupted cache purged | design (Ed25519+SHA verification) |
+| Unknown MC version | missing recipes → clean L0, dialog message | design (golden rule) |
+| Invalid signature | total execution refusal | design |
+| Absent agent | full L0 (never blocked) | Polymer/L0 proven |
+| Old runtime | minAgent manifest → Store update prompt | design |
+| Connection cut mid-stream | resume by hash (HTTP range) | standard |
+| Module crash | classloader isolation + kill switch + L0 fallback | design (JVM standard) |
+| Malicious server | modules not signed by a consented key → refusal | design |
 
-Ces comportements ne sont pas encore TESTÉS — ils sont conçus et feront partie du PoC J3 (casser volontairement chaque maillon).
+These behaviors are not yet TESTED — they are designed and will be part of PoC D3 (voluntarily breaking each link).
 
 ---
 
 ## 19. Blockers (§19)
 
-**Blockers absolus : AUCUN identifié.**
+**Absolute blockers: NONE identified.**
 
-**Blockers contournables :**
-1. JEP 451 (dynamic attach opt-in futur) → mitigation: env-var premain (rail principal, déjà le design) + `-XX:+EnableDynamicAgentLoading` documenté + fantôme. L'attach devient bonus, pas fondation.
-2. Revue Store incertaine pour un outil cheat-adjacent → exe EV fallback + transparence open-source.
-3. Chemins avec espaces dans env-var → **trouvé au lab, fix connu (quoting)**.
+**Workaround blockers:**
+1. JEP 451 (future opt-in dynamic attach) → mitigation: env-var premain (main rail, already the design) + documented `-XX:+EnableDynamicAgentLoading` + ghost version. Attach becomes a bonus, not the foundation.
+2. Uncertain Store review for a cheat-adjacent tool → EV exe fallback + open-source transparency.
+3. Spaces in env-var paths → **found in the lab, known fix (quoting)**.
 
-**Difficultés d'ingénierie :** Recipe Store multi-versions (le vrai coût), DevKit API, signature infra, télémétrie.
+**Engineering difficulties**: multi-version Recipe Store (the real cost), DevKit API, signature infrastructure, telemetry.
 
-**Problèmes UX :** Win10 ancien Store → exe ; enfant famille → approbation parentale ; macOS navigateur.
+**UX problems**: old Win10 Store → exe; family child → parental approval; macOS browser.
 
-**Problèmes de sécurité :** modèle permission à implémenter sérieusement (Phase 4) ; JVM sandbox morte (assumé).
+**Security problems**: permission model to implement seriously (Phase 4); JVM sandbox dead (assumed).
 
 ---
 
-## 20. « 100 % modding » défini honnêtement (§20)
+## 20. "100% modding" honestly defined (§20)
 
-**Pas** « 100 % des mods fonctionneront ». **Oui** : « la plateforme possède les primitives pour reproduire la quasi-totalité des capacités d'un loader moderne ».
+**Not** "100% of mods will work". **Yes**: "the platform has the primitives to reproduce almost all capabilities of a modern loader".
 
-| Domaine | Couverture | Base |
+| Domain | Coverage | Base |
 |---|---|---|
-| serveur | 100 % | plugins/forks existants |
-| client logic/events | ~98 % | modules |
-| networking | ~98 % | SDMP + vanilla |
-| rendering | ~95 % | modules (5 % engine extrême = tarif) |
-| GUI | ~98 % | N0 dialogs + screens module |
-| input | ~95 % | modules keybinds |
-| resources | 100 % | packs |
-| registries | ~95 % | hook freeze + virtuels |
-| worldgen | 100 % | datapacks |
-| entities | ~95 % | vraies entités via recettes boot |
-| gameplay | 100 % | serveur |
-| bytecode | ~95 % | recettes (parité Mixin à outiller) |
-| lifecycle | 100 % | plateforme (hot-load/unload/kill) |
+| server | 100% | existing plugins/forks |
+| client logic/events | ~98% | modules |
+| networking | ~98% | SDMP + vanilla |
+| rendering | ~95% | modules (5% extreme engine = price) |
+| GUI | ~98% | L0 dialogs + module screens |
+| input | ~95% | keybind modules |
+| resources | 100% | packs |
+| registries | ~95% | freeze hook + virtuals |
+| worldgen | 100% | datapacks |
+| entities | ~95% | true entities via boot recipes |
+| gameplay | 100% | server |
+| bytecode | ~95% | recipes (Mixin parity to tool) |
+| lifecycle | 100% | platform (hot-load/unload/kill) |
 
-**Moyenne pondérée ≈ 97-98 % des capacités, avec installation joueur ≈ 1 clic/vie.**
+**Weighted average ≈ 97-98% of capabilities, with player installation ≈ 1 click/life.**
 
 ---
 
-## 21. Comparaison loaders (§21)
+## 21. Loader comparison (§21)
 
-| Domaine | Fabric | Forge | NeoForge | SDM |
+| Domain | Fabric | Forge | NeoForge | SDM |
 |---|---|---|---|---|
-| Server logic | ✓ | ✓ | ✓ | ✓ (= + plugins écosystème) |
+| Server logic | ✓ | ✓ | ✓ | ✓ (= + plugin ecosystem) |
 | Client logic | ✓ | ✓ | ✓ | ✓ modules |
 | Networking | ✓ | ✓ | ✓✓ | ✓ + SDMP |
-| Rendering | ✓ | ✓ | ✓ | ~95 % |
+| Rendering | ✓ | ✓ | ✓ | ~95% |
 | GUI | ✓ | ✓ | ✓ | ✓ |
 | Input | ✓ | ✓ | ✓ | ✓ (module) |
-| Registry | ✓ | ✓ | ✓✓ | ~95 % (virtuels+hook) |
-| Worldgen | ✓ | ✓ | ✓ | ✓✓ (datapacks natifs) |
-| Entities | ✓ | ✓ | ✓ | ~95 % |
+| Registry | ✓ | ✓ | ✓✓ | ~95% (virtuals+hook) |
+| Worldgen | ✓ | ✓ | ✓ | ✓✓ (native datapacks) |
+| Entities | ✓ | ✓ | ✓ | ~95% |
 | Dynamic loading | ~ | ~ | ~ | ✓✓ hot-load/kill (unique) |
 | Server-driven modules | ✗ | ✗ | ✗ | ✓✓ (unique) |
-| UX installation | ✗✗ (modpacks) | ✗✗ | ✗✗ | ✓✓✓ 1 clic/vie (unique) |
-| Runtime control | ✗ | ✗ | ✗ | ✓✓ télémétrie+CRL (unique) |
+| Installation UX | ✗✗ (modpacks) | ✗✗ | ✗✗ | ✓✓✓ 1 click/life (unique) |
+| Runtime control | ✗ | ✗ | ✗ | ✓✓ telemetry+CRL (unique) |
 
-**Apport fondamental** : les 4 dernières lignes — distribution, orchestration, contrôle runtime. C'est la colonne qui n'existe nulle part ailleurs.
+**Fundamental contribution**: the last 4 lines — distribution, orchestration, runtime control. That is the column that exists nowhere else.
 
 ---
 
-## 22-23. Niveaux de validation & décision
+## 22-23. Validation levels & decision
 
-**Niveau 1 — faisabilité théorique : VALIDÉ.** Chaque mécanisme existe et est documenté (Oracle, meta Fabric, protocole MC décompilé, politiques Store) ; les 7 verrous du zéro-clic sont prouvés, bornant honnêtement l'ambition.
+**Level 1 — theoretical feasibility: VALIDATED.** Every mechanism exists and is documented (Oracle, Fabric meta, decompiled MC protocol, Store policies); the 7 locks of zero-click are proven, honestly bounding the ambition.
 
-**Niveau 2 — faisabilité technique : PARTIELLEMENT VALIDÉ.** Les chaînes JVM critiques (env-var→premain→transform→comportement ; attach→retransform→comportement live) **ont été exécutées en laboratoire ce jour** sur JDK 25 — pas sur Minecraft encore. Le delta restant = J1-J3 (2-3 semaines, 1 dev, risque faible car même API).
+**Level 2 — technical feasibility: PARTIALLY VALIDATED.** The critical JVM chains (env-var→premain→transform→behavior; attach→retransform→live behavior) **were executed in the laboratory today** on JDK 25 — not on Minecraft yet. The remaining delta = D1-D3 (2-3 weeks, 1 dev, low risk since same API).
 
-**Niveau 3 — faisabilité produit : NON VALIDÉ** (par définition — nécessite bêta joueurs réels, revue Store, adoption serveurs).
+**Level 3 — product feasibility: NOT VALIDATED** (by definition — requires real player beta, Store review, server adoption).
 
-## DÉCISION : **CONDITIONAL GO**
+## DECISION: **CONDITIONAL GO**
 
-La thèse est suffisamment démontrée pour **arrêter la recherche et commencer la construction**, sous condition unique : **réussir le PoC J1-J3 sur Minecraft réel** (transposition directe du lab — même mécanisme, cible réelle). Aucune inconnue théorique ne justifie davantage de recherche ; toutes les inconnues restantes sont de l'ingénierie et de la politique (revue Store), qui ne se lèvent qu'en construisant.
+The thesis is sufficiently demonstrated to **stop researching and start building**, under a single condition: **succeed at PoC D1-D3 on real Minecraft** (direct transposition of the lab — same mechanism, real target). No theoretical unknown justifies further research; all remaining unknowns are engineering and politics (Store review), which only lift by building.
 
 ```text
-THESIS VALIDATED (Niveau 1 ✓, Niveau 2 sur lab ✓, produit à construire)
+THESIS VALIDATED (Level 1 ✓, Level 2 on lab ✓, product to build)
 
 Architecture : Server-driven Minecraft Runtime (SDM)
-Client        : vanilla officiel + agent invisible (env-var/attach/fantôme)
-Server        : profondément extensible (Velocity+Canvas+plateforme)
-Modding       : ~97-98 % des capacités loaders + uniques (distribution,
+Client        : official vanilla + invisible agent (env-var/attach/ghost)
+Server        : deeply extensible (Velocity+Canvas+platform)
+Modding       : ~97-98% of loader capabilities + uniques (distribution,
                 hot-load, per-player, multi-version, kill switch)
-UX            : 1 clic/vie (Store) — 0 pour vanilla N0
-Preuves lab   : E1/E2 exécutées (transformation + attach à chaud OK)
-Statut        : CONDITIONAL GO → PoC J1-J3 (2-3 sem) → ROADMAP
+UX            : 1 click/life (Store) — 0 for vanilla L0
+Lab proofs    : E1/E2 executed (transformation + hot attach OK)
+Status        : CONDITIONAL GO → PoC D1-D3 (2-3 wks) → ROADMAP
 ```
 
 ---
 
-## 24. Roadmap (si GO — triggé par la réussite du PoC)
+## 24. Roadmap (if GO — triggered by PoC success)
 
-| Phase | Objectif | Livrables | Risques | Critères réussite |
+| Phase | Objective | Deliverables | Risks | Success criteria |
 |---|---|---|---|---|
-| 0 | PoC J1-J3 | plugin+agent+HUD live+event retour | faible | vidéo+logs, 0 crash |
-| 1 | Runtime v1 | agent prod (premain+attach+cache+verify) | moyen | survive 10 lancements |
-| 2 | Communication | SDMP complet (hello/manifest/events) | moyen | delta-sync <1 s |
-| 3 | Modules | classloaders, lifecycle, hot-load/unload | moyen | load/unload 100× sans fuite majeure |
-| 4 | Sécurité | Ed25519, permissions, consentement, CRL | moyen | audit interne passé |
-| 5 | Server API | ModuleHost, EventBridge, PackStudio | moyen | 5 features démo |
-| 6 | Client caps | HUD, keybinds, entités, rendu, vocal | moyen-fort | vocal J5 marche |
-| 7 | Compat layer | adapter Fabric server-side | fort | 1 mod réel chargé |
-| 8 | Modding API | ServerModAPI + DevKit | fort | dev externe écrit un module |
-| 9 | Tooling | CLI, signatures, registry, télémétrie | moyen | pipeline CI complet |
-| 10 | Production | Store app, bêta, 3 serveurs pilotes | fort (politique) | 100 joueurs, 1 sem, 0 incident majeur |
+| 0 | PoC D1-D3 | plugin+agent+live HUD+return event | low | video+logs, 0 crash |
+| 1 | Runtime v1 | prod agent (premain+attach+cache+verify) | medium | survives 10 launches |
+| 2 | Communication | complete SDMP (hello/manifest/events) | medium | delta-sync <1 s |
+| 3 | Modules | classloaders, lifecycle, hot-load/unload | medium | load/unload 100x without major leak |
+| 4 | Security | Ed25519, permissions, consent, CRL | medium | internal audit passed |
+| 5 | Server API | ModuleHost, EventBridge, PackStudio | medium | 5 demo features |
+| 6 | Client caps | HUD, keybinds, entities, rendering, voice | medium-high | voice D5 works |
+| 7 | Compat layer | Fabric server-side adapter | high | 1 real mod loaded |
+| 8 | Modding API | ServerModAPI + DevKit | high | external dev writes a module |
+| 9 | Tooling | CLI, signatures, registry, telemetry | medium | complete CI pipeline |
+| 10 | Production | Store app, beta, 3 pilot servers | high (politics) | 100 players, 1 week, 0 major incident |
 
 ---
 
-## 25. Règle absolue respectée
+## 25. Absolute rule respected
 
-Rien n'a été embellir : le lab a trouvé **un piège réel (espaces env-var)** et **une limite d'horizon (JEP 451)**, tous deux documentés avec mitigations. Aucune hypothèse n'a été confondue avec une preuve : H1 (Store) reste TRÈS PROBABLE, pas PROUVÉ — seule la soumission réelle le prouvera. Et la règle inverse est respectée : l'architecture n'a pas été déclarée impossible pour la seule raison qu'elle ne correspond pas au design de Mojang.
+Nothing was embellished: the lab found **one real trap (env-var spaces)** and **one horizon limit (JEP 451)**, both documented with mitigations. No hypothesis was confused with a proof: H1 (Store) remains VERY PROBABLE, not PROVEN — only actual submission will prove it. And the inverse rule is respected: the architecture was not declared impossible merely because it does not match Mojang's design.
 
 ```text
 ═══════════════════════════════════════════
-  VERDICT FINAL : CONDITIONAL GO
-  Recherche terminée. Construction autorisée.
-  Prochaine action : PoC J1-J3 (2-3 semaines).
+  FINAL VERDICT : CONDITIONAL GO
+  Research finished. Construction authorized.
+  Next action : PoC D1-D3 (2-3 weeks).
 ═══════════════════════════════════════════
 ```
