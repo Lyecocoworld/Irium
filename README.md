@@ -9,7 +9,7 @@
     <a href="#status"><img src="docs/img/badge-status.svg" alt="Status: in development"/></a>
     <a href="plugin/pom.xml"><img src="docs/img/badge-version.svg" alt="Irium v0.1.0"/></a>
     <a href="#compatibility"><img src="docs/img/badge-mc.svg" alt="Minecraft 26.1.2+"/></a>
-    <a href="LICENSE"><img src="docs/img/badge-license.svg" alt="License MIT"/></a>
+    <a href="LICENSE"><img src="docs/img/badge-license.svg" alt="License ELv2"/></a>
     <a href="#technology"><img src="docs/img/badge-java.svg" alt="Java 21+"/></a>
   </p>
 
@@ -100,7 +100,7 @@ irium/
 │   ├── research/    research documents (md)
 │   ├── brand/       visual identity (html)
 │   └── img/         svg assets (banner, badges)
-└── LICENSE          MIT
+└── LICENSE          Elastic License 2.0
 ```
 
 ## License
