@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Irium — Direction Artistique v2</title>
+<style>
+  :root{
+    --bg:#0A0A0B; --bg2:#111113; --card:#161619; --line:#26262B;
+    --ink:#F2F2F0; --dim:#A8A8AC; --faint:#5F5F66;
+    --gold:#FFD84D; --gold-deep:#E8A820; --amber:#FFB800;
+    --grey1:#2E2E33; --grey2:#3F3F46; --grey3:#8B8B93;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:'Segoe UI',system-ui,sans-serif;padding:40px 24px}
+  .wrap{max-width:1060px;margin:0 auto}
+  h1{font-size:14px;letter-spacing:4px;color:var(--faint);text-transform:uppercase;margin-bottom:8px}
+  h2{font-size:26px;margin-bottom:6px}
+  .lead{color:var(--dim);margin-bottom:36px;font-size:14px;max-width:740px}
+  .grid{display:grid;gap:18px}
+  .g2{grid-template-columns:1fr 1fr}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g5{grid-template-columns:repeat(5,1fr)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px}
+  .card h3{font-size:11.5px;letter-spacing:2px;text-transform:uppercase;color:var(--faint);margin-bottom:14px}
+
+  /* ---- LOGO HERO ---- */
+  .logo-hero{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:56px 20px 40px;background:
+    radial-gradient(ellipse 55% 70% at 50% 12%, rgba(255,216,77,.10), transparent 70%),
+    var(--bg2);
+    border:1px solid var(--line);border-radius:18px;margin-bottom:18px;position:relative;overflow:hidden}
+  .logo-hero::after{content:"";position:absolute;inset:auto 0 0 0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,216,77,.5),transparent)}
+  .gem{filter:drop-shadow(0 0 22px rgba(255,216,77,.28))}
+  .wordmark{font-size:66px;font-weight:800;letter-spacing:-2px;color:var(--ink);margin-top:14px}
+  .wordmark b{color:var(--gold);font-weight:800}
+  .tagline{color:var(--dim);font-size:13px;letter-spacing:4px;margin-top:6px;text-transform:uppercase}
+
+  .logo-variants{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:14px}
+  .variant{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;align-items:center;gap:10px}
+  .variant .gem{width:44px;height:44px;filter:none}
+  .variant span{font-size:10px;color:var(--faint);letter-spacing:1px;text-transform:uppercase}
+
+  /* ---- PALETTE ---- */
+  .swatch{height:78px;border-radius:10px;display:flex;align-items:flex-end;padding:8px 10px;font-size:10.5px;font-weight:600}
+  .swatch small{opacity:.7;font-weight:400;display:block}
+
+  /* ---- TYPE ---- */
+  .type-demo p{margin-bottom:10px}
+  .h-disp{font-size:34px;font-weight:800;letter-spacing:-1px;line-height:1.15}
+  .h-sec{font-size:19px;font-weight:700}
+  .body-t{font-size:13.5px;color:var(--dim);line-height:1.6}
+  .mono{font-family:'Cascadia Code',Consolas,monospace;font-size:12.5px;color:var(--gold)}
+
+  /* ---- UI MOCK ---- */
+  .mock{background:var(--bg2);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .mock-bar{display:flex;gap:6px;padding:10px 14px;border-bottom:1px solid var(--line);align-items:center}
+  .dot{width:9px;height:9px;border-radius:50%}
+  .mock-body{padding:20px;display:flex;flex-direction:column;gap:12px}
+  .btn{padding:10px 22px;border-radius:9px;font-weight:800;font-size:13px}
+  .btn-primary{background:var(--gold);color:#0A0A0B}
+  .btn-ghost{border:1px solid var(--grey2);color:var(--dim)}
+  .hud{font-family:Consolas,monospace;font-size:11.5px;color:var(--grey3)}
+  .hud .lit{color:var(--gold)}
+  .chip{display:inline-block;padding:3px 10px;border-radius:99px;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;font-weight:800}
+
+  /* ---- GEM ANATOMY ---- */
+  .gem-anatomy{display:flex;gap:16px;align-items:center;background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .anat-note{font-size:12px;color:var(--dim);line-height:1.65}
+  .anat-note b{color:var(--gold)}
+
+  .foot{margin-top:26px;color:var(--faint);font-size:11px;text-align:center;letter-spacing:1px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Direction Artistique — v2</h1>
+  <h2>Irium · Jaune / Noir / Gris · Gemstone</h2>
+  <p class="lead">L'or dans la roche noire. Le gemme est l'unique source de lumière — tout le reste est pierre. Un seul accent (jaune), une hiérarchie de gris, et du noir profond. L'identité « outil de chantier premium » rencontre « cristal rare ».</p>
+
+  <!-- LOGO HERO -->
+  <div class="logo-hero">
+    <svg class="gem" width="110" height="110" viewBox="0 0 100 100" fill="none">
+      <defs>
+        <linearGradient id="cTop" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFF3C4"/><stop offset="1" stop-color="#FFD84D"/></linearGradient>
+        <linearGradient id="cLeft" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFD84D"/><stop offset="1" stop-color="#C79012"/></linearGradient>
+        <linearGradient id="cRight" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E8A820"/><stop offset="1" stop-color="#8F6A0D"/></linearGradient>
+        <linearGradient id="cBot" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#6B5210"/><stop offset="1" stop-color="#B98A14"/></linearGradient>
+      </defs>
+      <!-- crystal : allongé, taillé, 6 facettes -->
+      <path d="M50 3 26 30 38 97 62 97 74 30Z" fill="url(#cLeft)"/>
+      <path d="M50 3 74 30 62 97 88 38Z" fill="url(#cRight)"/>
+      <path d="M50 3 26 30 38 97 12 38Z" fill="url(#cRight)" opacity=".65"/>
+      <path d="M50 3 74 30 62 97 38 97Z" fill="url(#cTop)"/>
+      <path d="M26 30 50 3 74 30" stroke="#0A0A0B" stroke-width="2" opacity=".8"/>
+      <path d="M38 97 50 3 62 97" stroke="#0A0A0B" stroke-width="1.4" opacity=".45"/>
+      <path d="M12 38 26 30 38 97" stroke="#0A0A0B" stroke-width="1" opacity=".3"/>
+      <!-- étincelle -->
+      <path d="M50 3 l0 0" stroke="#FFF8DC"/>
+      <circle cx="50" cy="5" r="2.2" fill="#FFF8DC"/>
+    </svg>
+    <div class="wordmark">Iri<b>u</b>m</div>
+    <div class="tagline">The rare element of modding</div>
+  </div>
+
+  <div class="logo-variants">
+    <div class="variant">
+      <svg class="gem" viewBox="0 0 100 100" fill="none">
+        <path d="M50 3 26 30 38 97 62 97 74 30Z" stroke="#FFD84D" stroke-width="3.5"/>
+        <path d="M26 30 74 30" stroke="#FFD84D" stroke-width="2" opacity=".6"/>
+      </svg>
+      <span>Contour — favicon</span>
+    </div>
+    <div class="variant">
+      <svg class="gem" viewBox="0 0 100 100" fill="none">
+        <rect x="12" y="12" width="76" height="76" rx="18" fill="#161619" stroke="#26262B"/>
+        <path d="M50 24 35 46 50 76 65 46Z" fill="#FFD84D"/>
+      </svg>
+      <span>Icône Store</span>
+    </div>
+    <div class="variant">
+      <svg class="gem" viewBox="0 0 100 100" fill="none">
+        <path d="M50 3 26 30 38 97 62 97 74 30Z" fill="#FFD84D"/>
+        <path d="M50 3 50 97" stroke="#0A0A0B" stroke-width="2.4" opacity=".5"/>
+        <path d="M26 30 74 30" stroke="#0A0A0B" stroke-width="1.8" opacity=".35"/>
+      </svg>
+      <span>Monochrome</span>
+    </div>
+    <div class="variant">
+      <svg class="gem" viewBox="0 0 100 100" fill="none">
+        <path d="M50 3 26 30 38 97 62 97 74 30Z" fill="none" stroke="#3F3F46" stroke-width="3"/>
+        <path d="M50 3 50 97" stroke="#3F3F46" stroke-width="1.6"/>
+      </svg>
+      <span>Désactivé / gris</span>
+    </div>
+  </div>
+
+  <div style="height:18px"></div>
+
+  <!-- PALETTE -->
+  <div class="card">
+    <h3>Palette — Roche noire, gris de taille, or</h3>
+    <div class="grid g5">
+      <div><div class="swatch" style="background:#0A0A0B;border:1px solid #26262B;color:#A8A8AC">Obsidienne<br><small>#0A0A0B</small></div></div>
+      <div><div class="swatch" style="background:#161619;color:#F2F2F0">Roche<br><small>#161619</small></div></div>
+      <div><div class="swatch" style="background:#8B8B93;color:#0A0A0B">Gris clair<br><small>#8B8B93</small></div></div>
+      <div><div class="swatch" style="background:#FFD84D;color:#0A0A0B">Irium Or<br><small>#FFD84D</small></div></div>
+      <div><div class="swatch" style="background:#FFB800;color:#0A0A0B">Or profond<br><small>#FFB800</small></div></div>
+    </div>
+    <p style="margin-top:12px;font-size:12px;color:var(--dim)">Règle d'or (littéralement) : <b style="color:var(--gold)">le jaune est RARE</b> — c'est la gemme. Fond noir/gris partout ; le jaune n'apparaît que pour ce qui compte (CTA, état actif, le logo, un chiffre clé). Si tout est jaune, rien n'est rare — et Irium est l'élément rare.</p>
+  </div>
+
+  <div style="height:18px"></div>
+
+  <div class="grid g2">
+    <!-- TYPO -->
+    <div class="card type-demo">
+      <h3>Typographie</h3>
+      <p class="h-disp">Le modding, extrait de la roche.</p>
+      <p class="h-sec">Titres — Space Grotesk / Archivo Bold</p>
+      <p class="body-t">Corps — Inter Regular. Ton : direct, minier, confiant. On ne décore pas — on taille. Les phrases courtes frappent comme des coups de burin.</p>
+      <p class="mono">$ irium attach --pid 4812 → gem loaded (0.3s)</p>
+      <p style="font-size:11.5px;color:var(--faint);margin-top:8px">Mono = la voix machine. Réservé runtime/logs/IDs. Jaune mono = événement positif.</p>
+    </div>
+
+    <!-- ANATOMIE GEMME -->
+    <div class="card">
+      <h3>Système gemstone</h3>
+      <div class="gem-anatomy">
+        <svg width="72" height="72" viewBox="0 0 100 100" fill="none">
+          <path d="M50 3 26 30 38 97 62 97 74 30Z" fill="url(#cTop)"/>
+          <path d="M50 3 74 30 62 97 88 38Z" fill="url(#cRight)"/>
+        </svg>
+        <div class="anat-note">
+          La gemme est <b>taillée</b> (pas ronde, pas organique) — c'est un cristal extrait, pas un bijou.<br><br>
+          <b>États produit = états gemme :</b><br>
+          ◆ contour gris = dormant (vanilla)<br>
+          ◆ plein or = actif (runtime chargé)<br>
+          ◆ éclat / spark = événement (module hot-loadé)
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:18px"></div>
+
+  <!-- UI MOCK -->
+  <div class="card">
+    <h3>Langage UI — exemples</h3>
+    <div class="grid g2">
+      <div class="mock">
+        <div class="mock-bar">
+          <div class="dot" style="background:#3F3F46"></div><div class="dot" style="background:#3F3F46"></div><div class="dot" style="background:#FFD84D"></div>
+          <span style="margin-left:8px;font-size:11px;color:var(--faint)">irium — consentement serveur</span>
+        </div>
+        <div class="mock-body">
+          <span class="chip" style="background:rgba(255,216,77,.12);color:#FFD84D">◆ Nouveau serveur</span>
+          <div style="font-size:16px;font-weight:700">CocoWorld souhaite enrichir votre expérience</div>
+          <div class="body-t">3 modules — rendu, hud, vocal. Signés, révocables, invisibles hors serveur.</div>
+          <div style="display:flex;gap:10px">
+            <div class="btn btn-primary">◆ Activer</div>
+            <div class="btn btn-ghost">Continuer en classique</div>
+          </div>
+        </div>
+      </div>
+      <div class="mock">
+        <div class="mock-bar"><div class="dot" style="background:#FFD84D"></div><span style="margin-left:8px;font-size:11px;color:var(--faint)">irium runtime — overlay in-game</span></div>
+        <div class="mock-body" style="min-height:172px;justify-content:center;gap:8px">
+          <div class="hud"><span class="lit">◆ irium</span> runtime active · 3 modules · 41 ms</div>
+          <div class="hud">CocoWallet — <span class="lit">12 850 cocos</span></div>
+          <div class="hud">Aura de Mack — stabilisée</div>
+          <div class="hud">vocal — connecté (opus, 12 ms)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">IRIUM DA v2 · jaune #FFD84D / noir #0A0A0B / gris #8B8B93 · gemstone taillée · l'élément rare</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,23 @@
+# Irium — messages FR (règle prod FR : fichier obligatoire)
+# Palette CocoWorld : succès #55FFA4 · erreur #FA4943 · emphase #FFE873 · gris #B8BBC2
+prefix: "<#FFD84D>Irium</#FFD84D> <#3F3F3F>·</#3F3F3F> "
+welcome_active: "<#55FFA4>Expérience complète activée.</#55FFA4> <#B8BBC2>Tout se charge automatiquement sur ce serveur.</#B8BBC2>"
+welcome_classic: "<#B8BBC2>Mode classique retenu.</#B8BBC2> <#B8BBC2>Vous pouvez activer l'expérience à tout moment avec</#B8BBC2> <#FFD84D>/irium</#FFD84D>"
+already_active: "<#55FFA4>L'expérience Irium est déjà active.</#55FFA4>"
+status_line: "<#B8BBC2>Statut :</#B8BBC2> <#FFD84D>{state}</#FFD84D> <#B8BBC2>· Agent :</##B8BBC2> <#B8BBC2>{agent}</#B8BBC2>"
+agent_detected: "<#55FFA4>Agent Irium détecté — expérience complète disponible.</#55FFA4>"
+dialog:
+  title: "Irium"
+  body: "<#B8BBC2>Ce serveur propose l'expérience</#B8BBC2> <#FFD84D>Irium</#FFD84D><#B8BBCD>.</#B8BBC2>"
+  body2: "<#B8BBC2>Effets, interfaces et contenu exclusif — sans rien installer,</#B8BBC2>"
+  body3: "<#B8BBC2>rechargez simplement quand on vous le demande.</#B8BBC2>"
+  yes: "Activer"
+  no: "Continuer sans"
+  yes_tooltip: "<#55FFA4>Activer l'expérience complète</#55FFA4>"
+  no_tooltip: "<#B8BBC2>Rester en mode classique</#B8BBC2>"
+chat_fallback:
+  prompt: "<#FFD84D>Ce serveur propose l'expérience Irium.</#FFD84D>"
+  click_yes: "<#55FFA4>[Activer]</#55FFA4>"
+  hover_yes: "<#55FFA4>Activer l'expérience complète</#55FFA4>"
+  click_no: "<#B8BBC2>[Continuer sans]</#B8BBC2>"
+  hover_no: "<#B8BBC2>Rester en mode classique</#B8BBC2>"

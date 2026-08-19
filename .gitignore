@@ -1,0 +1,25 @@
+# Build
+plugin/target/
+target/
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Maven
+dependency-reduced-pom.xml
+
+# Lab / local
+lab/
+*.log

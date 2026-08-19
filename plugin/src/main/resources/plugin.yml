@@ -1,0 +1,17 @@
+name: Irium
+version: 0.1.0
+main: dev.irium.plugin.IriumPlugin
+api-version: '26.1.2'
+canvas-supported: true
+folia-supported: true
+author: Irium
+description: Irium — the rare element of modding. Phase 0 / J1.
+commands:
+  irium:
+    description: Ouvrir le consentement Irium ou voir son statut
+    usage: /irium [status]
+    permission: irium.use
+permissions:
+  irium.use:
+    description: Utiliser Irium
+    default: true
