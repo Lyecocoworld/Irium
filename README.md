@@ -91,17 +91,6 @@ This project builds on five years of technical research: how far a vanilla clien
 | Agent | JVM agent (startup + hot attach), ASM, Ed25519 |
 | Security | enrolled servers, signed modules, revocation |
 
-## Structure
-
-```text
-irium/
-├── plugin/          server plugin (Paper/Canvas)
-├── docs/
-│   ├── research/    research documents (md)
-│   ├── brand/       visual identity (html)
-│   └── img/         svg assets (banner, badges)
-└── LICENSE          Elastic License 2.0
-```
 
 ## License
 
