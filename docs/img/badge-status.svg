@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="136" height="30" viewBox="0 0 136 30" role="img" aria-label="Status badge: in development">
+  <rect width="136" height="30" rx="15" fill="#161619" stroke="#FFD84D" stroke-width="1.5"/>
+  <circle cx="18" cy="15" r="4" fill="#FFD84D">
+    <animate attributeName="opacity" values="1;0.35;1" dur="2.2s" repeatCount="indefinite"/>
+  </circle>
+  <text x="34" y="19.5" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-size="10.5" font-weight="700" letter-spacing="2" fill="#FFD84D">IN DEV</text>
+  <text x="86" y="19.5" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-size="10" font-weight="400" fill="#8B8B93">phase 0</text>
+</svg>

@@ -1,138 +1,156 @@
 <div align="center">
+  <a href="https://github.com/Lyecocoworld/irium">
+    <img src="docs/img/banner.svg" alt="Irium — the rare element of modding" width="880"/>
+  </a>
 
-```
-╔══════════════════════════════════════════════╗
-║                                              ║
-║     ██╗██████╗ ██╗ ██████╗ ██╗  ██╗          ║
-║     ██║██╔══██╗██║██╔════╝ ██║  ██║          ║
-║     ██║██████╔╝██║██║  ███╗███████║          ║
-║██   ██║██╔══██╗██║██║   ██║██╔══██║          ║
-║╚█████╔╝██║  ██║██║╚██████╔╝██║  ██║          ║
-║ ╚════╝ ╚═╝  ╚═╝╚═╝ ╚═════╝ ╚═╝  ╚═╝          ║
-║                                              ║
-║        THE RARE ELEMENT OF MODDING           ║
-║                                              ║
-╚══════════════════════════════════════════════╝
-```
+  <br/>
 
-# Irium
+  <p>
+    <a href="#status"><img src="docs/img/badge-status.svg" alt="Status: in development"/></a>
+    <a href="plugin/pom.xml"><img src="docs/img/badge-version.svg" alt="Irium v0.1.0"/></a>
+    <a href="#compatibilité"><img src="docs/img/badge-mc.svg" alt="Minecraft 26.1.2+"/></a>
+    <a href="LICENSE"><img src="docs/img/badge-license.svg" alt="License MIT"/></a>
+    <a href="#technologie" ><img src="docs/img/badge-java.svg" alt="Java 21+"/></a>
+  </p>
 
-**Une nouvelle génération de plateforme de modding Minecraft — le serveur devient la plateforme, le client reste vanilla.**
-
-*Zéro installation de mods. Un clic, une fois. Tout le modding.*
-
+  <p><strong>Le serveur devient la plateforme de modding.<br/>Le client reste vanilla.</strong></p>
 </div>
 
 ---
 
-## 📜 Le problème
+## Vue d'ensemble
 
-Installer des mods aujourd'hui, c'est un chemin de croix :
-
-```text
-Installer Fabric/Forge/NeoForge
-+ Installer l'API du loader
-+ Télécharger 14 mods
-+ Vérifier les versions compatibles
-+ Gérer les dépendances
-+ Copier les fichiers dans .minecraft/mods
-+ Relancer le jeu
-= Et recommencer par serveur, par modpack, par mise à jour.
-```
-
-Chaque serveur moddé exige son propre client moddé. C'est le talon d'Achille du modding Minecraft depuis 15 ans.
-
-## 💎 La thèse Irium
-
-> **Le module est le produit. Les packs sont le filet.**
-
-Irium inverse l'équation : le **serveur** devient la plateforme de modding. Il héberge le runtime, les modules, les dépendances, la logique et le contenu. Le client n'exécute qu'un **agent minimal (~300 Ko)** installé une seule fois — puis n'importe quel serveur Irium lui fournit dynamiquement tout ce dont il a besoin : HUD, interfaces riches, rendering custom, keybinds, effets, entités, gameplay complet.
+Installer des mods Minecraft aujourd'hui impose au joueur :
 
 ```text
-CLIENT VANILLA
-      │
-      ▼
-AGENT IRIUM (~300 Ko, installé 1×)
-      │  handshake + capability manifest
-      ▼
-SERVEUR IRIUM ──► runtime, modules, API, contenu, sécurité
-      │
-      ▼
-HUD custom · UI riche · rendering · input · gameplay
-— tout apparaît dans la session, tout disparaît en quittant —
+fabric installer  →  api  →  14 mods  →  versions  →  dépendances  →  mods/  →  reboot
 ```
 
-- **Session sandbox** : tout ce que le serveur ajoute disparaît à la déconnexion — le client redevient vanilla comportementalement.
-- **Dual-track** : les joueurs sans agent jouent en mode « N0 » (datapacks + resource packs = ~20 % de la magie) ; les joueurs équipés obtiennent les ~80 % restants (HUD, UI riche, rendering, input).
-- **L'agent ne grandira jamais** : il ne contient rien d'autre que le protocole (ASM + runtime minimal + crypto JDK). Toutes les features vivent côté serveur.
+Et à refaire pour chaque serveur, chaque modpack, chaque mise à jour. Irium supprime cette route.
 
-## 🔬 D'où ça vient : 5 ans de recherche
+Irium est une plateforme de modding **server-driven** : le serveur héberge le runtime, les modules et le contenu ; le client n'exécute qu'un agent minimal installé une seule fois. Chaque serveur Irium fournit ensuite dynamiquement tout ce dont le joueur a besoin — HUD, interfaces riches, rendering, keybinds, gameplay — directement dans la session de jeu.
 
-Ce projet est né d'une recherche technique exhaustive (2021 → 2026) sur la question : *« Jusqu'où peut-on pousser un client Minecraft vanilla avant d'avoir besoin de le modifier ? »*
+```text
+        client vanilla
+              │
+              ▼
+    agent irium · ~300 Ko · installé 1×
+              │   handshake · manifest · signature
+              ▼
+    serveur irium ─── runtime ─ modules ─ api ─ contenu
+              │
+              ▼
+    hud · ui riche · rendering · input · gameplay
+    tout apparaît dans la session · tout disparaît en quittant
+```
 
-Les rapports complets (français, PDF) sont dans [`docs/research/`](docs/research/) :
+## Principes
 
-| Document | Contenu |
+| | |
 |---|---|
-| [`RAPPORT_SDM.pdf`](docs/research/RAPPORT_SDM.pdf) | Recherche complète : niveaux d'escalade N0→N6, classloaders, agents JVM, protocole, architecture serveur, sécurité |
-| [`RAPPORT_SDM2.pdf`](docs/research/RAPPORT_SDM2.pdf) | Deuxième vague : les 7 verrous, JDK_JAVA_OPTIONS, version fantôme, Attach API, distribution Microsoft Store |
-| [`VALIDATION_SDM.pdf`](docs/research/VALIDATION_SDM.pdf) | Validation expérimentale : falsification en labo (JDK 25), preuves premain / retransform / attach à chaud |
-| [`CONCLUSION_ET_PLAN.pdf`](docs/research/CONCLUSION_ET_PLAN.pdf) | Verdict CONDITIONAL GO, méthodologie, roadmap MVP 6 semaines, plan P1→P10 |
+| **Le module est le produit** | Les resource packs et datapacks sont le filet de sécurité, pas le cœur. La valeur vient du code streamé. |
+| **Session sandbox** | Tout ce que le serveur ajoute disparaît à la déconnexion. Le client redevient vanilla, comportementalement. |
+| **Dual-track** | Joueur sans agent : expérience de base (packs). Joueur équipé : expérience complète (code). |
+| **Agent minimal éternel** | ~300 Ko, rien d'autre que le protocole — ASM, runtime, crypto. Il ne grandira jamais. Toutes les features vivent côté serveur. |
 
-## 🚧 Statut : IN DEV
-
-Ce projet est en **développement actif et précoce**. Rien n'est utilisable en production.
+## Architecture
 
 ```text
-[x] Phase 0 / J1 — Plugin serveur : dialog de consentement natif (Paper Dialog API)
-    · Dialog natif client (confirmation Activer / Continuer sans)
-    · Fallback chat cliquable (clients protocole < 767)
-    · Persistance du consentement (jamais redemandé)
-    · Canal plugin irium:hello (poche pour le handshake agent J2)
-    · Folia/Canvas-safe (EntityScheduler, callbacks reschedulés)
-[ ] Phase 0 / J2 — Agent JVM : injection HUD dans la session live (PoC)
-[ ] Phase 1 — Handshake complet + capability manifest
-[ ] Phase 2 — Streaming de modules signés
+                        ┌─────────────────────────────────────┐
+                        │              client                 │
+                        │  ┌───────────────┐  ┌────────────┐  │
+                        │  │ minecraft     │  │ agent irium│  │
+                        │  │ vanilla       │◄─┤  ~300 ko   │  │
+                        │  │               │  └─────┬──────┘  │
+                        │  └───────────────┘        │         │
+                        └───────────────────────────┼─────────┘
+                                                    │ tls
+                        ┌───────────────────────────┼─────────┐
+                        │            serveur        │         │
+                        │  ┌────────────────────────▼───────┐ │
+                        │  │ irium hub · runtime · modules  │ │
+                        │  │ signatures · cache · sandbox   │ │
+                        │  └────────────────────────────────┘ │
+                        │         ▲          ▲         ▲      │
+                        │   plugins   economy   persistence  │
+                        └─────────────────────────────────────┘
 ```
 
-Le code du plugin est dans [`plugin/`](plugin/) (Maven, Java 21, `paper-api 26.1.2.build.74-stable`, compatible Canvas/Folia).
+## Recherche
 
-## 🎨 Identité
+Ce projet repose sur cinq ans de recherche technique (2021 → 2026) autour d'une question : *jusqu'où peut-on pousser un client vanilla avant d'avoir besoin de le modifier ?* Verdict : **conditional go** — tous les verrous identifiés sont de l'ingénierie, aucun n'est théorique.
 
-Direction artistique : **jaune / noir / gris**, identité **gemstone** — l'or brut dans la roche noire. L'élément rare. Voir [`docs/brand/DA_IRIUM.html`](docs/brand/DA_IRIUM.html).
+Rapports complets en français dans [`docs/research/`](docs/research/) :
 
-```text
-#0A0A0B  Obsidienne    — fond
-#161619  Roche         — surfaces secondaires
-#26262B  Faille        — lignes, bordures
-#8B8B93  Gris clair    — texte secondaire
-#FFD84D  Irium Or      — LA couleur (rare : logo, CTA, actif)
-#FFB800  Or profond    — dégradés
-```
+| Rapport | Contenu |
+|---|---|
+| [`RAPPORT_SDM`](docs/research/RAPPORT_SDM.pdf) | Niveaux d'escalade N0→N6 · classloaders · agents JVM · protocole · architecture serveur · sécurité |
+| [`RAPPORT_SDM2`](docs/research/RAPPORT_SDM2.pdf) | Les 7 verrous · JDK_JAVA_OPTIONS · version fantôme · Attach API · distribution Store |
+| [`VALIDATION_SDM`](docs/research/VALIDATION_SDM.pdf) | Falsification en labo JDK 25 · preuves premain / retransform / attach à chaud |
+| [`CONCLUSION_ET_PLAN`](docs/research/CONCLUSION_ET_PLAN.pdf) | Verdict conditional go · méthodologie · roadmap MVP · plan P1→P10 |
 
-## 🛣️ Roadmap
+## Statut
 
-| Phase | Contenu | Statut |
+<span id="status"></span>
+
+Development phase 0 — construction des fondations. Rien n'est utilisable en production.
+
+| Jalon | Contenu | État |
 |---|---|---|
-| Phase 0 | Plugin Canvas + consent dialog + canal hello | ✅ J1 fait |
-| Phase 1 | Agent JVM (premain, ClassFileTransformer, HUD) | 🔬 recherche validée |
-| Phase 2 | Handshake + manifest + cache signé | 📐 conception |
-| Phase 3 | Streaming modules + session sandbox | 📐 conception |
-| Phase 4 | Irium Studio (DevKit) + API publique | 📝 planifiée |
-| Phase 5 | Compat Fabric (tiers 1-3 : extraction → adapter → émulation) | 📝 planifiée |
+| **J1** | Plugin serveur : dialog de consentement natif, fallback chat, persistance, canal `irium:hello`, Folia-safe | **fait** |
+| **J2** | Agent JVM : injection HUD dans une session live (PoC) | **suivant** |
+| **Phase 1** | Handshake complet + capability manifest | planifié |
+| **Phase 2** | Streaming de modules signés + cache vérifié | planifié |
+| **Phase 3** | Session sandbox complète + hot loading | planifié |
+| **Phase 4** | Irium Studio (devkit) + API publique | planifié |
+| **Phase 5** | Pont de compatibilité Fabric (3 tiers) | planifié |
 
-## ⚖️ Licence & usage
+## Compatibilité
 
-Code de ce dépôt sous licence MIT. Les documents de recherche sont fournis à titre informatif — recherche indépendante, non affiliée à Mojang ni Microsoft.
+<span id="compatibilit"></span>
 
-*Minecraft est une marque de Mojang Studios. Irium n'est pas affilié à Mojang, Microsoft ou les projets Fabric/Forge/NeoForge.*
+| Élément | Statut |
+|---|---|
+| Canvas 26.1.2 · Folia · Paper | supporté (plugin J1) |
+| Clients vanilla ≥ 1.21.7 (protocole 767+) | dialog natif |
+| Clients plus anciens | fallback chat cliquable |
+| Agent | recherche validée (lab JDK 25), binaire non distribué |
+| Fabric / Forge / NeoForge | pont 3 tiers planifié (tier 1 : extraction d'assets) |
+
+## Technologie
+
+<span id="technologie"></span>
+
+| Composant | Choix |
+|---|---|
+| Serveur | Paper / Canvas / Folia — plugin Maven, `paper-api 26.1.2.build.74-stable` |
+| Langage | Java 21 |
+| Agent | Java agent (premain + attach), ASM, Ed25519 |
+| Signature | Ed25519 sur manifestes et modules |
+| Distribution | Microsoft Store (runFullTrust), fallback exe signé |
+
+## Structure
+
+```text
+irium/
+├── plugin/          plugin serveur Paper/Canvas (J1)
+├── docs/
+│   ├── research/    4 rapports de recherche (pdf + md)
+│   ├── brand/       direction artistique (html)
+│   └── img/         assets svg (banner, badges)
+└── LICENSE          MIT
+```
+
+## Identité
+
+Direction artistique **gemstone** : l'or brut dans la roche noire — jaune `#FFD84D`, noir `#0A0A0B`, gris `#8B8B93`. Le jaune est rare : il ne marque que ce qui compte. [`DA_IRIUM.html`](docs/brand/DA_IRIUM.html)
 
 ---
 
 <div align="center">
 
-**Irium — the rare element of modding.**
+**irium**
 
-*La route de l'installation s'arrête ici.* 💎
+*la route de l'installation s'arrête ici*
 
 </div>
