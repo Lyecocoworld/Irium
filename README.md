@@ -105,4 +105,4 @@ irium/
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Independent project, not affiliated with Mojang Studios or Microsoft. Minecraft is a trademark of Mojang Studios.
+Elastic License 2.0 — see [LICENSE](LICENSE). The code is free to use, study, modify, and redistribute; the only restrictions: don't offer it as a hosted service, don't remove or obscure licensing notices, and don't circumvent the license key. Independent project, not affiliated with Mojang Studios or Microsoft. Minecraft is a trademark of Mojang Studios.
