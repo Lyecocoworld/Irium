@@ -86,7 +86,6 @@ This project builds on five years of technical research: how far a vanilla clien
 ## Technology
 
 | | |
-|---|---|
 | Server | Paper / Canvas / Folia plugin, Java 21 |
 | Agent | JVM agent (startup + hot attach), ASM, Ed25519 |
 | Security | enrolled servers, signed modules, revocation |
