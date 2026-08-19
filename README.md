@@ -18,52 +18,55 @@
 
 ---
 
-## Vue d'ensemble
+## Le problème
 
-Installer des mods Minecraft aujourd'hui impose au joueur :
+Jouer sur un serveur moddé aujourd'hui :
 
 ```text
 fabric installer  →  api  →  14 mods  →  versions  →  dépendances  →  mods/  →  reboot
 ```
 
-Et à refaire pour chaque serveur, chaque modpack, chaque mise à jour. Irium supprime cette route.
+À refaire pour chaque serveur, chaque modpack, chaque mise à jour. Résultat : les serveurs "plugins" et les serveurs "mods" sont deux mondes fermés. Un serveur Paper ne peut pas proposer d'interfaces riches, de HUD custom, de rendering — parce que le joueur devrait installer les mods lui-même. Et la plupart ne le font jamais.
 
-Irium est une plateforme de modding **server-driven** : le serveur héberge le runtime, les modules, les dépendances et le contenu. Le client n'exécute qu'un agent JVM minimal installé une seule fois. Chaque serveur Irium fournit ensuite dynamiquement tout ce dont le joueur a besoin — HUD, interfaces riches, rendering, keybinds, gameplay — directement dans la session de jeu. **Le module est le produit ; les packs sont le filet.**
+## Le projet
+
+Irium supprime cette frontière. C'est une plateforme de modding **server-driven** :
+
+- le **serveur** héberge le runtime, les modules, les dépendances et le contenu — il gère le client et le serveur ;
+- le **joueur** installe une seule fois un petit agent JVM (~300 Ko) via une application, un clic ;
+- ensuite, sur n'importe quel serveur Irium, tout arrive automatiquement dans la session : HUD, interfaces riches, rendering, keybinds, gameplay. Rien à télécharger, rien à configurer.
+
+Le joueur garde son launcher habituel, ses instances, ses versions. Un joueur sans agent voit simplement le serveur comme un serveur plugin normal.
 
 ## Comment ça fonctionne
 
-### 1 · L'agent JVM — une installation, tous les launchers
+### L'agent JVM
 
-L'agent est un `javaagent` d'environ 300 Ko qui ne modifie **ni le jeu, ni ses fichiers**. Il s'injecte au niveau de la JVM (`premain` au lancement, attach à chaud si le jeu tourne déjà), ce qui le rend indépendant du launcher :
+L'agent est un `javaagent` qui ne modifie ni le jeu, ni ses fichiers. Il s'injecte au niveau de la JVM (au lancement, ou à chaud si le jeu tourne déjà), ce qui le rend indépendant du launcher :
 
 | | |
 |---|---|
-| Launchers | officiel, SKLauncher, Prism, CurseForge, ATLauncher, Modrinth App — tout ce qui lance une JVM |
-| Instances | n'importe quelle version, n'importe quel profil, plusieurs instances en parallèle |
-| Installation | une seule fois, via l'app (un clic) ; l'agent s'active ensuite partout, automatiquement |
-| Contenu | rien d'autre que le protocole — ASM, runtime, crypto. Toutes les features vivent côté serveur |
+| Launchers | officiel, SKLauncher, Prism, CurseForge, ATLauncher, Modrinth App |
+| Instances | n'importe quelle version, n'importe quel profil, en parallèle |
+| Installation | une seule fois, un clic ; l'agent s'active ensuite partout |
+| Contenu | rien d'autre que le protocole — ASM, runtime, crypto |
 
-L'agent ne grandira jamais. Il ne contient aucune feature : il est la **porte**, pas la maison.
+L'agent ne grandira jamais. Il est la **porte**, pas la maison : toutes les features vivent côté serveur.
 
-### 2 · La chaîne de confiance — un serveur non validé n'obtient rien
+### La chaîne de confiance
 
-L'agent joue aussi le rôle de **clé d'authentification**. La règle est simple :
+L'agent est aussi une **clé d'authentification** :
 
 ```text
 serveur enrôlé + manifest signé + agent authentique  →  expérience complète
-serveur non enrôlé, clé invalide, signature absente  →  rien du tout
+serveur non enrôlé · clé invalide · signature absente →  rien du tout
 ```
 
-Concrètement : un opérateur qui installerait le système Irium sur son serveur **sans enrôlement validé par la plateforme** ne streamera rien. L'agent rejette ses manifests, le joueur reste sur l'expérience vanilla de base (datapacks et resource packs standards). C'est la condition pour que la technologie soit sûre pour les joueurs — et sereine pour les serveurs légitimes :
+Un opérateur qui installe le système Irium sur son serveur **sans enrôlement validé par la plateforme** ne streamera rien. L'agent rejette ses manifests, le joueur reste en vanilla. C'est ce qui rend la technologie sûre pour les joueurs et sereine pour les serveurs légitimes : chaque serveur est identifié, chaque manifest est signé et vérifié avant exécution, tout est révocable.
 
-- chaque serveur est enrôlé et identifié auprès de la plateforme ;
-- chaque manifest de modules est signé (Ed25519) et vérifié avant exécution ;
-- révocation possible (liste de révocation, kill-switch) ;
-- sandbox de session : tout ce que le serveur ajoute disparaît à la déconnexion — le client redevient vanilla, comportementalement.
+### Le streaming
 
-### 3 · Streaming pur — le serveur pilote les deux bouts
-
-C'est le cœur de la technologie : **un seul côté à développer, un seul côté à déployer**. Le serveur compile, signe et sert les modules ; l'agent les télécharge, les vérifie et les exécute dans le client.
+Le serveur compile, signe et sert les modules. L'agent les télécharge, les vérifie et les exécute dans le client. Un seul côté à développer, un seul côté à déployer.
 
 ```text
         client vanilla
@@ -79,46 +82,25 @@ C'est le cœur de la technologie : **un seul côté à développer, un seul côt
     tout apparaît dans la session · tout disparaît en quittant
 ```
 
-Le dual-track reste actif en permanence : un joueur sans agent (ou un serveur non enrôlé) reçoit l'expérience de base via packs ; un joueur équipé sur un serveur enrôlé reçoit le flux complet. Les modules peuvent être activés à chaud, en pleine session.
+Tout ce que le serveur ajoute est **sandboxé dans la session** : à la déconnexion, le client redevient vanilla. Les modules peuvent être activés à chaud, en pleine partie.
 
-### 4 · Plugins et mods — deux voies, une plateforme
+### Plugins et modules
 
-Irium réunit les deux mondes qui étaient séparés depuis toujours :
+Irium réunit les deux mondes : les **plugins** (le cerveau : économie, persistance, gameplay, grades — tout ce qui existe déjà côté serveur) et les **modules** (la peau : ce que le serveur streame au client). Les deux communiquent par un pont d'événements. Un serveur Paper classique peut donc offrir une expérience visuelle équivalente à un modpack, sans qu'aucun joueur n'installe quoi que ce soit.
 
-| Voie | Rôle | Ce qu'elle gagne |
-|---|---|---|
-| **Plugins** (le cerveau) | logique serveur : économie, persistance, gameplay, grades | l'accès aux super-pouvoirs des mods via l'**API Irium** — HUD, interfaces riches, rendering, input — sans jamais quitter le modèle plugin |
-| **Modules** (la peau) | ce que le serveur streame au client | un runtime signé, sandboxé, chargé à la demande |
+À terme, les plugins bénéficient du plein potentiel des mods grâce à l'**API Irium** : HUD, interfaces riches, rendering, input — sans jamais quitter le modèle plugin.
 
-Les deux voies communiquent par un pont d'événements (`irium.event.*`) : un plugin déclenche, le module affiche. Un serveur Paper classique peut donc offrir une expérience visuelle équivalente à un modpack, sans qu'aucun joueur n'installe quoi que ce soit.
+### Compatibilité loaders
 
-### 5 · Compatibilité loaders — une voie à la fois, comme un vrai loader
+La compatibilité Fabric / Forge / NeoForge suivra les règles réelles des loaders :
 
-La compatibilité Fabric / Forge / NeoForge suivra les règles réelles des loaders, pas de magie :
+- **une voie par serveur** : Fabric *ou* Forge *ou* NeoForge — comme un joueur choisit son loader aujourd'hui ;
+- **pas de cross-compatibilité gratuite** : un mod d'une autre voie ne fonctionnera pas, sauf pont précis construit au cas par cas ;
+- **le gateway est la dernière phase** du projet — on construit d'abord notre propre fondation.
 
-- **une voie par instance** : le serveur choisit Fabric *ou* Forge *ou* NeoForge — exactement comme un joueur choisit son loader aujourd'hui ;
-- **pas de cross-compatibilité gratuite** : un mod d'une autre voie ne fonctionnera pas, sauf via un pont précis, construit au cas par cas ;
-- **le gateway est la dernière phase** du projet — pas la première. On ne promet pas de faire tourner l'écosystème existant tel quel ; on construit d'abord notre propre fondation.
+### L'API native
 
-### 6 · L'API native d'abord — plus simple, plus safe
-
-Avant tout gateway de compatibilité, Irium fournit sa propre API de développement :
-
-- décrire un module (HUD, UI, rendering, input) **sans écrire de code client** quand c'est possible ;
-- des manifestes validés au build — les conflits module/module sont éliminés par design ;
-- signatures, permissions et sandbox intégrés dès la première ligne de code.
-
-Et porter un mod existant est peu coûteux : **le fonctionnement global du mod est conservé** (items, blocs, logique, registries). Seule la **couche communication** change — les canaux du loader sont remplacés par le protocole Irium, le serveur orchestrant la synchronisation. La majorité des mods ne demandent donc qu'un rework ciblé, pas une réécriture.
-
-## Principes
-
-| | |
-|---|---|
-| **Le module est le produit** | Les resource packs et datapacks sont le filet de sécurité, pas le cœur. La valeur vient du code streamé. |
-| **Session sandbox** | Tout ce que le serveur ajoute disparaît à la déconnexion. Le client redevient vanilla, comportementalement. |
-| **Agent minimal éternel** | ~300 Ko, rien d'autre que le protocole. Il ne grandira jamais. Toutes les features vivent côté serveur. |
-| **Confiance vérifiée** | Serveurs enrôlés, manifests signés, révocation possible. Un serveur non validé n'obtient rien. |
-| **Une voie loader à la fois** | Fabric, Forge ou NeoForge — les règles des loaders restent vraies. Les ponts viennent en dernier. |
+Avant tout gateway, Irium fournit sa propre API de développement, conçue pour être plus simple et plus sûre que le modding classique : décrire un module sans écrire de code client quand c'est possible, manifestes validés au build, signatures et sandbox intégrés. Porter un mod existant est peu coûteux : le fonctionnement global est conservé, seule la **couche communication** change.
 
 ## Architecture
 
@@ -142,19 +124,6 @@ Et porter un mod existant est peu coûteux : **le fonctionnement global du mod e
                         │   plugins   economy   persistence   │
                         └─────────────────────────────────────┘
 ```
-
-## Recherche
-
-Ce projet repose sur cinq ans de recherche technique (2021 → 2026) autour d'une question : *jusqu'où peut-on pousser un client vanilla avant d'avoir besoin de le modifier ?*
-
-Rapports complets en français dans [`docs/research/`](docs/research/) :
-
-| Rapport | Contenu |
-|---|---|
-| [`RAPPORT_SDM`](docs/research/RAPPORT_SDM.pdf) | Niveaux d'escalade N0→N6 · classloaders · agents JVM · protocole · architecture serveur · sécurité |
-| [`RAPPORT_SDM2`](docs/research/RAPPORT_SDM2.pdf) | Les 7 verrous · JDK_JAVA_OPTIONS · version fantôme · Attach API · distribution Store |
-| [`VALIDATION_SDM`](docs/research/VALIDATION_SDM.pdf) | Falsification en labo JDK 25 · preuves premain / retransform / attach à chaud |
-| [`CONCLUSION_ET_PLAN`](docs/research/CONCLUSION_ET_PLAN.pdf) | Verdict conditional go · méthodologie · roadmap MVP · plan P1→P10 |
 
 ## Statut
 
@@ -196,18 +165,12 @@ Phase 0 — construction des fondations. Rien n'est utilisable en production.
 irium/
 ├── plugin/          plugin serveur Paper/Canvas (J1)
 ├── docs/
-│   ├── research/    4 rapports de recherche (pdf + md)
+│   ├── research/    documents de recherche (md)
 │   ├── brand/       direction artistique (html)
 │   └── img/         assets svg (banner, badges)
 └── LICENSE          MIT
 ```
 
----
+## Licence
 
-<div align="center">
-
-**irium**
-
-*la route de l'installation s'arrête ici*
-
-</div>
+MIT — voir [LICENSE](LICENSE). Projet indépendant, non affilié à Mojang Studios ni Microsoft. Minecraft est une marque de Mojang Studios.
