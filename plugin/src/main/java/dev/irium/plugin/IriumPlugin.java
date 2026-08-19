@@ -28,6 +28,7 @@ import java.util.UUID;
 public final class IriumPlugin extends JavaPlugin {
 
     public static final String CHANNEL_HELLO = "irium:hello";
+    public static final String CHANNEL_MODULE = "irium:module";
     private static final MiniMessage MM = MiniMessage.miniMessage();
 
     private final Set<UUID> active = new HashSet<>();
@@ -48,13 +49,24 @@ public final class IriumPlugin extends JavaPlugin {
         handshake = new HandshakeListener(this);
         handshake.registerChannels();
 
+        // M4 : canal module — pousse du code compilé vers les clients AGENT
+        getServer().getMessenger().registerOutgoingPluginChannel(this, CHANNEL_MODULE);
+        modulePusher = new ModulePusher(this);
+        getServer().getMessenger().registerIncomingPluginChannel(this, CHANNEL_MODULE, (channel, player, bytes) -> {
+            if (bytes.length > 0 && bytes[0] == (byte) 0x81) { // EVENT
+                String[] kv = decodeTwoStrings(bytes, 1);
+                if (kv != null) IriumPlugin.log("event '" + kv[0] + "' de " + player.getName() + ": " + kv[1]);
+            }
+        });
+
         // Commande /irium (CommandMap legacy-compatible — jamais getCommand() avec paper-plugin.yml)
         registerCommand();
 
         // Join : proposer une fois par joueur (si pas déjà de choix)
         getServer().getPluginManager().registerEvents(new JoinListener(this), this);
 
-        getLogger().info("Irium 0.2.0 (M2) — consent + handshake. Canal: " + CHANNEL_HELLO);
+        getLogger().info("Irium 0.3.0 (M4) — consent + handshake + modules streamés. Canaux: "
+                + CHANNEL_HELLO + ", " + CHANNEL_MODULE);
     }
 
     /** Log préfixé (utilisé par HandshakeListener et les tests). */
@@ -119,9 +131,10 @@ public final class IriumPlugin extends JavaPlugin {
         try { y.save(consentFile); } catch (IOException e) { getLogger().warning("consent save: " + e.getMessage()); }
     }
 
-    /* ---------------- détection agent (M2) ---------------- */
+    /* ---------------- détection agent (M2) + modules (M4) ---------------- */
 
     private HandshakeListener handshake;
+    private ModulePusher modulePusher;
 
     HandshakeListener handshake() {
         return handshake;
@@ -135,15 +148,67 @@ public final class IriumPlugin extends JavaPlugin {
 
     public void sendHello(Player p) {
         if (handshake != null) {
-            handshake.start(p, classified ->
-                    getLogger().info("client classé: " + classified.player().getName()
-                            + " = " + classified.classification()
-                            + (classified.classification() == HandshakeListener.Classification.AGENT
-                            ? " v" + classified.agentVersion() : "")));
+            handshake.start(p, classified -> {
+                getLogger().info("client classé: " + classified.player().getName()
+                        + " = " + classified.classification()
+                        + (classified.classification() == HandshakeListener.Classification.AGENT
+                        ? " v" + classified.agentVersion() : ""));
+                // M4 : pousser les modules dès qu'un client est classé AGENT
+                if (classified.classification() == HandshakeListener.Classification.AGENT) {
+                    modulePusher.pushAll(classified.player());
+                }            });
+        }
+    }
+
+    private static String[] decodeTwoStrings(byte[] b, int off) {
+        try {
+            java.io.ByteArrayInputStream in = new java.io.ByteArrayInputStream(b, off, b.length - off);
+            String a = readStr(in);
+            String c = readStr(in);
+            return new String[]{a, c};
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static String readStr(java.io.ByteArrayInputStream in) throws IOException {
+        int len = readVarInt(in);
+        byte[] x = in.readNBytes(len);
+        return new String(x, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    private static int readVarInt(java.io.ByteArrayInputStream in) throws IOException {
+        int v = 0, sh = 0;
+        while (true) {
+            int x = in.read();
+            if (x < 0) throw new IOException("EOF");
+            v |= (x & 0x7F) << sh;
+            if ((x & 0x80) == 0) return v;
+            sh += 7;
         }
     }
 
     /* ---------------- commande ---------------- */
+
+    /** Liste les modules chargés dans plugins/Irium/modules. */
+    public String[] listModules() {
+        return modulePusher.available();
+    }
+
+    /** Commande console/joueur : pousse un module précis. */
+    public void pushModule(org.bukkit.command.CommandSender sender, String name) {
+        java.util.List<? extends org.bukkit.entity.Player> targets = sender instanceof Player p
+                ? java.util.List.of(p)
+                : new java.util.ArrayList<>(getServer().getOnlinePlayers());
+        if (targets.isEmpty()) {
+            sender.sendMessage("[irium] aucun joueur en ligne");
+            return;
+        }
+        for (Player t : targets) {
+            if (agentDetected(t)) modulePusher.push(t, name);
+            else sender.sendMessage("[irium] " + t.getName() + " n'est pas AGENT (module ignoré)");
+        }
+    }
 
     private void registerCommand() {
         org.bukkit.command.Command cmd = new org.bukkit.command.Command("irium") {

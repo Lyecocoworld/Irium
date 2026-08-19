@@ -5,7 +5,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>dev.irium</groupId>
   <artifactId>irium-agent</artifactId>
-  <version>0.3.0</version>
+  <version>0.4.0</version>
   <packaging>jar</packaging>
   <name>Irium Agent</name>
 
@@ -65,7 +65,7 @@
               <Agent-Class>dev.irium.agent.IriumAgent</Agent-Class>
               <Can-Redefine-Classes>true</Can-Redefine-Classes>
               <Can-Retransform-Classes>true</Can-Retransform-Classes>
-              <Irium-Version>0.3.0</Irium-Version>
+              <Irium-Version>0.4.0</Irium-Version>
             </manifestEntries>
           </archive>
         </configuration>

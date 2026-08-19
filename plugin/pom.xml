@@ -6,7 +6,7 @@
 
     <groupId>dev.irium</groupId>
     <artifactId>irium</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
     <packaging>jar</packaging>
     <name>Irium</name>
     <description>Irium — the rare element of modding. J1: consent dialog + hello channel.</description>

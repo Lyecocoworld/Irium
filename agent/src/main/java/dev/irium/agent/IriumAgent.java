@@ -55,10 +55,10 @@ public final class IriumAgent {
         }
     }
 
-    static void log(String message) {
+    public static void log(String message) {
         System.err.println("[irium] " + message);
     }
 
     /** Diagnostic verbeux (labo). */
-    static boolean DEBUG = true; // M3 lab : garder trace de chaque trame vue par le tap
+    static boolean DEBUG = Boolean.getBoolean("irium.debug"); // -Dirium.debug=true pour la trace verbeuse
 }

@@ -33,6 +33,7 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
 
     public static final String NAME = "irium_tap";
     private static final String CHANNEL = "irium:hello";
+    private static final String MODULE_CHANNEL = dev.irium.agent.module.ModuleManager.CHANNEL;
 
     private enum State { LOGIN, CONFIGURATION, PLAY }
 
@@ -78,6 +79,12 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
     }
 
     /* ---------------- observation ---------------- */
+
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        dev.irium.agent.module.ModuleManager.close(ctx.channel()); // sandbox : tout retombe
+        super.channelInactive(ctx);
+    }
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
@@ -138,14 +145,18 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
         ByteBuf reg = Unpooled.buffer();
         writeVarInt(reg, 0x16);
         writeString(reg, "minecraft:register");
-        reg.writeBytes(CHANNEL.getBytes(StandardCharsets.UTF_8));
+        reg.writeBytes((CHANNEL + "\0" + MODULE_CHANNEL).getBytes(StandardCharsets.UTF_8));
         ctx.channel().writeAndFlush(reg);
-        IriumAgent.log("[tap] minecraft:register " + CHANNEL + " envoyé");
+        IriumAgent.log("[tap] minecraft:register " + CHANNEL + " + " + MODULE_CHANNEL + " envoyé");
     }
 
     private void onCustomPayload(ChannelHandlerContext ctx, ByteBuf d, int offset) {
         d.readerIndex(offset);
         String chan = readString(d);
+        if (MODULE_CHANNEL.equals(chan)) {
+            dev.irium.agent.module.ModuleManager.of(ctx.channel()).ingest(d);
+            return;
+        }
         if (!CHANNEL.equals(chan)) return;
         int bodyLen = d.readableBytes();
         if (bodyLen < 12) return;
@@ -158,7 +169,7 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
         IriumAgent.log("[tap] CHALLENGE irium nonce=0x" + Long.toHexString(nonce));
 
         // réponse : IR + v1 + TYPE_AGENT_RESPONSE + nonce(8) + len(2) + "0.3.0" + caps
-        byte[] ver = "0.3.0".getBytes(StandardCharsets.UTF_8);
+        byte[] ver = "0.4.0".getBytes(StandardCharsets.UTF_8);
         ByteBuf resp = Unpooled.buffer();
         writeVarInt(resp, 0x16);
         writeString(resp, CHANNEL);
@@ -168,7 +179,7 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
         resp.writeBytes(ver);
         resp.writeByte(0x1F);
         ctx.channel().writeAndFlush(resp);
-        IriumAgent.log("[tap] réponse AGENT envoyée (0.3.0, caps=0x1F)");
+        IriumAgent.log("[tap] réponse AGENT envoyée (0.4.0, caps=0x1F)");
     }
 
     /* ---------------- utilitaires octets ---------------- */
