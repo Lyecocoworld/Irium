@@ -4,7 +4,7 @@
 
 ---
 
-# 1. Reconstitution exacte de la thèse
+## 1. Reconstitution exacte de la thèse
 
 ## 1.1 Composants
 
@@ -76,7 +76,7 @@ UTILISATEUR (gosse, SKLauncher, sans compte MS)
 
 ---
 
-# 2. Résultats du laboratoire de falsification (exécuté ce jour)
+## 2. Résultats du laboratoire de falsification (exécuté ce jour)
 
 Environnement : Windows 10, JDK 25.0.3 Temurin, bash MSYS. Sources dans `sdm3/lab/`, logs dans `sdm3/proof/`.
 
@@ -92,7 +92,7 @@ Environnement : Windows 10, JDK 25.0.3 Temurin, bash MSYS. Sources dans `sdm3/la
 
 ---
 
-# 3. Matrice de preuve H1-H14
+## 3. Matrice de preuve H1-H14
 
 | Hyp | Énoncé | Preuve disponible | Code vérifié | PoC requis | Risque | Statut |
 |---|---|---|---|---|---|---|
@@ -113,7 +113,7 @@ Environnement : Windows 10, JDK 25.0.3 Temurin, bash MSYS. Sources dans `sdm3/la
 
 ---
 
-# 4. Vérification du chemin utilisateur (§5 du brief)
+## 4. Vérification du chemin utilisateur (§5 du brief)
 
 | Transition | Mécanisme | Statut |
 |---|---|---|
@@ -131,7 +131,7 @@ Environnement : Windows 10, JDK 25.0.3 Temurin, bash MSYS. Sources dans `sdm3/la
 
 ---
 
-# 5. Le Microsoft Store (§6) — ce que l'app peut/pas
+## 5. Le Microsoft Store (§6) — ce que l'app peut/pas
 
 | Question | Réponse vérifiée |
 |---|---|
@@ -145,7 +145,7 @@ Environnement : Windows 10, JDK 25.0.3 Temurin, bash MSYS. Sources dans `sdm3/la
 
 ---
 
-# 6. Architecture IPC (§7) — vérifiée
+## 6. Architecture IPC (§7) — vérifiée
 
 ```text
 Minecraft (JVM)  ←[in-process: l'agent VIT DANS la JVM du jeu — pas d'IPC pour le runtime]
@@ -158,7 +158,7 @@ Agent ↔ Serveur  ←[socket de jeu existant (canal SDMP) + HTTPS parallèle po
 
 ---
 
-# 7. Test « vrai modding » (§8) — les 10 tests
+## 7. Test « vrai modding » (§8) — les 10 tests
 
 | # | Test | Mécanisme SDM | Statut |
 |---|---|---|---|
@@ -177,10 +177,10 @@ Test 10 = la définition même du modding. Il est prouvé au niveau JVM ; sa tra
 
 ---
 
-# 8. Compat « mod-like » (§9) — échantillon réel
+## 8. Compat « mod-like » (§9) — échantillon réel
 
 | Mod | Ce qu'il fait | Client | Reproduisible ? | Partie impossible |
-|---|---|---|---|—|
+|---|---|---|---|-|
 | Nether Depths Upgrade (Fabric, simple) | items/blocs contenu | assets | OUI (N0 complet) | aucune |
 | Create (Fabric/Forge, complexe) | machines, cinétiques, rendu | assets+rendu+GUI | OUI à réécrire (module) ; rotors animés = display N0 approx | rien de fondamental |
 | SVC (Fabric, vocal) | micro/opus/UDP | code complet | OUI (module: Java Sound+Opus+sockets) | aucune (décomposé) |
@@ -193,7 +193,7 @@ Test 10 = la définition même du modding. Il est prouvé au niveau JVM ; sa tra
 
 ---
 
-# 9. Pyramide de puissance (§10)
+## 9. Pyramide de puissance (§10)
 
 ```text
             FULL MODDING (98-100 %)
@@ -209,7 +209,7 @@ La limite exacte sans runtime : 5 familles (code arbitraire, types registres fer
 
 ---
 
-# 10-16. Puissance serveur, bidirectionnalité, perf, sécurité, portabilité, auth (§11-16)
+## 10-16. Puissance serveur, bidirectionnalité, perf, sécurité, portabilité, auth (§11-16)
 
 **Serveur (§11)** : tout est déjà prouvé par l'écosystème (Folia/Canvas + plugins + Velocity + Geyser = preuves vivantes de remplacement de systèmes, registres custom serveur, transformation de packets). La plateforme ajoute l'orchestration client — objet des rapports 1-2.
 
@@ -244,7 +244,7 @@ Versions MC : recettes par version côté serveur (matrice de build) ; vanilla N
 
 ---
 
-# 17. PoC minimal (§17) — LA seule chose entre nous et le GO
+## 17. PoC minimal (§17) — LA seule chose entre nous et le GO
 
 ```text
 Chaîne fondamentale à démontrer sur MINECRAFT réel:
@@ -261,7 +261,7 @@ Durée: 2-3 semaines. Coût: 1 dev. Livrable: vidéo + logs.
 
 ---
 
-# 18. Tests de défaillance (§18) — comportement attendu (par conception + lab)
+## 18. Tests de défaillance (§18) — comportement attendu (par conception + lab)
 
 | Casse | Comportement attendu | Preuve |
 |---|---|---|
@@ -278,7 +278,7 @@ Ces comportements ne sont pas encore TESTÉS — ils sont conçus et feront part
 
 ---
 
-# 19. Blockers (§19)
+## 19. Blockers (§19)
 
 **Blockers absolus : AUCUN identifié.**
 
@@ -295,7 +295,7 @@ Ces comportements ne sont pas encore TESTÉS — ils sont conçus et feront part
 
 ---
 
-# 20. « 100 % modding » défini honnêtement (§20)
+## 20. « 100 % modding » défini honnêtement (§20)
 
 **Pas** « 100 % des mods fonctionneront ». **Oui** : « la plateforme possède les primitives pour reproduire la quasi-totalité des capacités d'un loader moderne ».
 
@@ -319,7 +319,7 @@ Ces comportements ne sont pas encore TESTÉS — ils sont conçus et feront part
 
 ---
 
-# 21. Comparaison loaders (§21)
+## 21. Comparaison loaders (§21)
 
 | Domaine | Fabric | Forge | NeoForge | SDM |
 |---|---|---|---|---|
@@ -341,7 +341,7 @@ Ces comportements ne sont pas encore TESTÉS — ils sont conçus et feront part
 
 ---
 
-# 22-23. Niveaux de validation & décision
+## 22-23. Niveaux de validation & décision
 
 **Niveau 1 — faisabilité théorique : VALIDÉ.** Chaque mécanisme existe et est documenté (Oracle, meta Fabric, protocole MC décompilé, politiques Store) ; les 7 verrous du zéro-clic sont prouvés, bornant honnêtement l'ambition.
 
@@ -368,7 +368,7 @@ Statut        : CONDITIONAL GO → PoC J1-J3 (2-3 sem) → ROADMAP
 
 ---
 
-# 24. Roadmap (si GO — triggé par la réussite du PoC)
+## 24. Roadmap (si GO — triggé par la réussite du PoC)
 
 | Phase | Objectif | Livrables | Risques | Critères réussite |
 |---|---|---|---|---|
@@ -386,7 +386,7 @@ Statut        : CONDITIONAL GO → PoC J1-J3 (2-3 sem) → ROADMAP
 
 ---
 
-# 25. Règle absolue respectée
+## 25. Règle absolue respectée
 
 Rien n'a été embellir : le lab a trouvé **un piège réel (espaces env-var)** et **une limite d'horizon (JEP 451)**, tous deux documentés avec mitigations. Aucune hypothèse n'a été confondue avec une preuve : H1 (Store) reste TRÈS PROBABLE, pas PROUVÉ — seule la soumission réelle le prouvera. Et la règle inverse est respectée : l'architecture n'a pas été déclarée impossible pour la seule raison qu'elle ne correspond pas au design de Mojang.
 

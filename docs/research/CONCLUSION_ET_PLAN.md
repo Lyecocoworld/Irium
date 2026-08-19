@@ -4,7 +4,7 @@
 
 ---
 
-# 1. Conclusion de recherche — le résumé en une page
+## 1. Conclusion de recherche — le résumé en une page
 
 ## 1.1 Ce qui a été démontré (3 documents, 1 laboratoire)
 
@@ -47,7 +47,7 @@ Conséquences vérifiables :
 
 ---
 
-# 2. Méthodologie de travail pour mener le projet à bien
+## 2. Méthodologie de travail pour mener le projet à bien
 
 ## 2.1 La doctrine : « le seul échec possible est l'exécution »
 
@@ -86,7 +86,7 @@ Boucle par phase               : critères de réussite de la roadmap = gate ;
 
 ---
 
-# 3. Roadmap MVP puis complète
+## 3. Roadmap MVP puis complète
 
 ## 3.1 MVP — « la démo qui tue » (6 semaines, 1 dev)
 
@@ -122,7 +122,7 @@ Total MVP→P8 : ~6 mois à 1 dev ; ~3 mois à 2 devs.
 
 ---
 
-# 4. Fonctionnalités et petits plus non cités jusqu'ici
+## 4. Fonctionnalités et petits plus non cités jusqu'ici
 
 ## 4.1 Capacités plateforme (les « super-pouvoirs »)
 
@@ -159,7 +159,7 @@ Total MVP→P8 : ~6 mois à 1 dev ; ~3 mois à 2 devs.
 
 ---
 
-# 5. La rupture appliquée à CocoWorld — concepts de conversion
+## 5. La rupture appliquée à CocoWorld — concepts de conversion
 
 Principe : **les plugins restent le cerveau (logique, vérité, persistance) ; les modules deviennent la peau (rendu, HUD, feedback)**. Communication par EventBridge (`sdm.event.*`). Voici le concept de conversion pour chaque pilier CocoWorld.
 
@@ -227,7 +227,7 @@ Principe : **les plugins restent le cerveau (logique, vérité, persistance) ; l
 
 ---
 
-# 6. Ce qui vient après la rupture (vision)
+## 6. Ce qui vient après la rupture (vision)
 
 1. **Court terme** : CocoWorld = serveur vitrine (« le premier serveur où le modding s'installe tout seul ») → contenu marketing natif.
 2. **Moyen terme** : 3-10 serveurs pilotes FR → la plateforme devient un produit (inscription, registry de modules signés, dashboard owner).
