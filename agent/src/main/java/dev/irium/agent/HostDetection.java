@@ -41,13 +41,16 @@ final class HostDetection {
             }
         }
 
-        // 2. Classpath — a jar or folder whose path mentions a Minecraft
-        //    client version directory (.minecraft/versions/...).
+        // 2. Classpath — evidence of a Minecraft client layout:
+        //    a jar inside a "versions" directory (the client jar), or any
+        //    path mentioning .minecraft. Synthetic layouts (dev servers,
+        //    test harnesses) only need the versions/<x>/<x>.jar signature.
         String classpath = System.getProperty("java.class.path", "");
         for (String entry : classpath.split(File.pathSeparator)) {
             String p = entry.toLowerCase(Locale.ROOT);
-            if (p.contains("versions") && (p.contains(".minecraft")
-                    || p.contains("minecraft") && p.endsWith(".jar"))) {
+            boolean versionsJar = p.contains("versions") && p.endsWith(".jar");
+            boolean dotMinecraft = p.contains(".minecraft");
+            if (versionsJar || dotMinecraft) {
                 evidence.add("classpath:" + shorten(entry));
                 if (evidence.size() >= 4) {
                     break;
