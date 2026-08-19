@@ -37,13 +37,16 @@ public final class IriumPlugin extends JavaPlugin {
 
     @Override
     public void onEnable() {
+        instance = this;
         saveDefaultConfig();
         consentFile = new File(getDataFolder(), "consent.yml");
         loadConsent();
         messages = loadMessagesFr();
 
-        // Canal hello (login/configuration) — détection agent (J2 branchera l'écoute réelle)
+        // Canal hello (login/configuration) — détection agent (M2 : handshake réel)
         getServer().getMessenger().registerOutgoingPluginChannel(this, CHANNEL_HELLO);
+        handshake = new HandshakeListener(this);
+        handshake.registerChannels();
 
         // Commande /irium (CommandMap legacy-compatible — jamais getCommand() avec paper-plugin.yml)
         registerCommand();
@@ -51,8 +54,17 @@ public final class IriumPlugin extends JavaPlugin {
         // Join : proposer une fois par joueur (si pas déjà de choix)
         getServer().getPluginManager().registerEvents(new JoinListener(this), this);
 
-        getLogger().info("Irium 0.1.0 (J1) — consent layer ready. Canal: " + CHANNEL_HELLO);
+        getLogger().info("Irium 0.2.0 (M2) — consent + handshake. Canal: " + CHANNEL_HELLO);
     }
+
+    /** Log préfixé (utilisé par HandshakeListener et les tests). */
+    public static void log(String message) {
+        JavaPlugin pl = instance;
+        if (pl != null) pl.getLogger().info(message);
+        else System.out.println("[irium] " + message);
+    }
+
+    private static IriumPlugin instance;
 
     @Override
     public void onDisable() {
@@ -107,17 +119,27 @@ public final class IriumPlugin extends JavaPlugin {
         try { y.save(consentFile); } catch (IOException e) { getLogger().warning("consent save: " + e.getMessage()); }
     }
 
-    /* ---------------- détection agent (J2) ---------------- */
+    /* ---------------- détection agent (M2) ---------------- */
 
-    /** J2 branchera la réponse réelle au canal hello. J1 : heuristique = activé + rejoin. */
+    private HandshakeListener handshake;
+
+    HandshakeListener handshake() {
+        return handshake;
+    }
+
+    /** M2 : handshake réel sur le canal irium:hello. */
     public boolean agentDetected(Player p) {
-        return active.contains(p.getUniqueId());
+        HandshakeListener.Classified c = handshake != null ? handshake.classificationOf(p.getUniqueId()) : null;
+        return c != null && c.classification() == HandshakeListener.Classification.AGENT;
     }
 
     public void sendHello(Player p) {
-        if (p.getListeningPluginChannels().contains(CHANNEL_HELLO)) {
-            p.sendPluginMessage(this, CHANNEL_HELLO, new byte[]{1});
-            getLogger().info("hello envoyé à " + p.getName() + " (agent présent)");
+        if (handshake != null) {
+            handshake.start(p, classified ->
+                    getLogger().info("client classé: " + classified.player().getName()
+                            + " = " + classified.classification()
+                            + (classified.classification() == HandshakeListener.Classification.AGENT
+                            ? " v" + classified.agentVersion() : "")));
         }
     }
 
@@ -137,14 +159,15 @@ public final class IriumPlugin extends JavaPlugin {
                 }
                 if (args.length > 0 && args[0].startsWith("__")) {
                     // chemins cliqués depuis le fallback chat
-                    p.getScheduler().run(IriumPlugin.this, null,
-                            () -> {
-                                if (args[0].equals("__accept")) ConsentFlow.accept(IriumPlugin.this, p);
-                                else ConsentFlow.decline(IriumPlugin.this, p);
-                            });
+                    p.getScheduler().run(IriumPlugin.this, task -> {
+                        if (args[0].equals("__accept")) ConsentFlow.accept(IriumPlugin.this, p);
+                        else ConsentFlow.decline(IriumPlugin.this, p);
+                    }, () -> {
+                    });
                     return true;
                 }
-                p.getScheduler().run(IriumPlugin.this, null, () -> ConsentFlow.offer(IriumPlugin.this, p));
+                p.getScheduler().run(IriumPlugin.this, task -> ConsentFlow.offer(IriumPlugin.this, p), () -> {
+                });
                 return true;
             }
         };

@@ -1,5 +1,5 @@
 name: Irium
-version: 0.1.0
+version: 0.2.0
 main: dev.irium.plugin.IriumPlugin
 api-version: '26.1.2'
 canvas-supported: true

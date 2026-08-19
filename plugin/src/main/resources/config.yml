@@ -1,0 +1,7 @@
+# Irium plugin configuration
+# The consent layer has no configurable options yet; this file exists so
+# saveDefaultConfig() has a base to write and future settings land here.
+irium:
+  handshake:
+    # Ticks before a silent client is classified VANILLA (20 ticks = 1 s)
+    timeout-ticks: 40
