@@ -59,7 +59,7 @@ Irium est une plateforme de modding **server-driven** : le serveur héberge le r
                         ┌─────────────────────────────────────┐
                         │              client                 │
                         │  ┌───────────────┐  ┌────────────┐  │
-                        │  │ minecraft     │  │ agent irium│  │
+                        │  │ minecraft     │  │agent irium │  │
                         │  │ vanilla       │◄─┤  ~300 ko   │  │
                         │  │               │  └─────┬──────┘  │
                         │  └───────────────┘        │         │
@@ -72,7 +72,7 @@ Irium est une plateforme de modding **server-driven** : le serveur héberge le r
                         │  │ signatures · cache · sandbox   │ │
                         │  └────────────────────────────────┘ │
                         │         ▲          ▲         ▲      │
-                        │   plugins   economy   persistence  │
+                        │   plugins   economy   persistence   │
                         └─────────────────────────────────────┘
 ```
 
