@@ -78,7 +78,7 @@ Irium est une plateforme de modding **server-driven** : le serveur héberge le r
 
 ## Recherche
 
-Ce projet repose sur cinq ans de recherche technique (2021 → 2026) autour d'une question : *jusqu'où peut-on pousser un client vanilla avant d'avoir besoin de le modifier ?* Verdict : **conditional go** — tous les verrous identifiés sont de l'ingénierie, aucun n'est théorique.
+Ce projet repose sur cinq ans de recherche technique (2021 → 2026) autour d'une question : *jusqu'où peut-on pousser un client vanilla avant d'avoir besoin de le modifier ?*
 
 Rapports complets en français dans [`docs/research/`](docs/research/) :
 
@@ -140,10 +140,6 @@ irium/
 │   └── img/         assets svg (banner, badges)
 └── LICENSE          MIT
 ```
-
-## Identité
-
-Direction artistique **gemstone** : l'or brut dans la roche noire — jaune `#FFD84D`, noir `#0A0A0B`, gris `#8B8B93`. Le jaune est rare : il ne marque que ce qui compte. [`DA_IRIUM.html`](docs/brand/DA_IRIUM.html)
 
 ---
 
