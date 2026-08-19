@@ -56,7 +56,8 @@ final class ConsentFlow {
         DialogAction.CustomClickAction yesAction = DialogAction.customClick(
                 (response, audience) -> {
                     if (audience instanceof Player player) {
-                        player.getScheduler().run(plugin, null, () -> accept(plugin, player));
+                        // Folia : run(plugin, Consumer<ScheduledTask>=work, Runnable=retired) — work JAMAIS null
+                        player.getScheduler().run(plugin, task -> accept(plugin, player), null);
                     }
                 },
                 ClickCallback.Options.builder().uses(1).build());
@@ -64,7 +65,7 @@ final class ConsentFlow {
         DialogAction.CustomClickAction noAction = DialogAction.customClick(
                 (response, audience) -> {
                     if (audience instanceof Player player) {
-                        player.getScheduler().run(plugin, null, () -> decline(plugin, player));
+                        player.getScheduler().run(plugin, task -> decline(plugin, player), null);
                     }
                 },
                 ClickCallback.Options.builder().uses(1).build());

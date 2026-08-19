@@ -1,13 +1,29 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-schema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>dev.irium</groupId>
   <artifactId>irium-agent</artifactId>
-  <version>0.1.0</version>
+  <version>0.3.0</version>
   <packaging>jar</packaging>
   <name>Irium Agent</name>
+
+  <dependencies>
+    <!-- ASM : bytecode weaving du pipeline netty (relocalisé dans l'agent final) -->
+    <dependency>
+      <groupId>org.ow2.asm</groupId>
+      <artifactId>asm</artifactId>
+      <version>9.9.1</version>
+    </dependency>
+    <!-- Netty : compile-only, fourni par le host à l'exécution (jamais shadé) -->
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-transport</artifactId>
+      <version>4.2.15.Final</version>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
 
   <properties>
     <maven.compiler.source>21</maven.compiler.source>
@@ -19,6 +35,27 @@
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.6.0</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals><goal>shade</goal></goals>
+            <configuration>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <relocations>
+                <!-- ASM relocalisé : le host peut charger sa propre version d'ASM (mods) -->
+                <relocation>
+                  <pattern>org.objectweb.asm</pattern>
+                  <shadedPattern>dev.irium.shaded.asm</shadedPattern>
+                </relocation>
+              </relocations>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
         <version>3.4.1</version>
         <configuration>
@@ -26,9 +63,9 @@
             <manifestEntries>
               <Premain-Class>dev.irium.agent.IriumAgent</Premain-Class>
               <Agent-Class>dev.irium.agent.IriumAgent</Agent-Class>
-              <Can-Retransform-Classes>true</Can-Retransform-Classes>
               <Can-Redefine-Classes>true</Can-Redefine-Classes>
-              <Irium-Version>0.1.0</Irium-Version>
+              <Can-Retransform-Classes>true</Can-Retransform-Classes>
+              <Irium-Version>0.3.0</Irium-Version>
             </manifestEntries>
           </archive>
         </configuration>

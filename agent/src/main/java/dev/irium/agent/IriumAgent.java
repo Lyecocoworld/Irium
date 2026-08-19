@@ -34,18 +34,20 @@ public final class IriumAgent {
             return; // already bootstrapped — ignore duplicate attach
         }
         String mode = hotAttach ? "attach" : "premain";
+        boolean force = args != null && args.contains("force");
         try {
             HostDetection.Result host = HostDetection.detect();
-            log("[" + mode + "] irium-agent 0.1.0 bootstrapping");
+            log("[" + mode + "] irium-agent 0.3.0 bootstrapping" + (force ? " (force)" : ""));
             log("[" + mode + "] host detection: " + host);
 
-            if (!host.minecraft()) {
+            if (!host.minecraft() && !force) {
                 // Dormant: not a Minecraft process. Touch nothing further.
                 log("[" + mode + "] non-Minecraft process -> dormant, no transformer registered");
                 return;
             }
 
-            log("[" + mode + "] Minecraft detected -> registering observation transformer");
+            log("[" + mode + "] Minecraft detected -> registering netty hook (M3) + observation transformer");
+            inst.addTransformer(new NettyHook(), false);
             inst.addTransformer(new ObservationTransformer(), true);
         } catch (Throwable t) {
             // A client agent must NEVER break the host process.
@@ -56,4 +58,7 @@ public final class IriumAgent {
     static void log(String message) {
         System.err.println("[irium] " + message);
     }
+
+    /** Diagnostic verbeux (labo). */
+    static boolean DEBUG = true; // M3 lab : garder trace de chaque trame vue par le tap
 }

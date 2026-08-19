@@ -24,3 +24,4 @@ dependency-reduced-pom.xml
 lab/
 *.log
 harness/.work/
+harness/.lab/
