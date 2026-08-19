@@ -45,7 +45,6 @@ Le joueur garde son launcher habituel, ses instances, ses versions. Un joueur sa
 L'agent est un `javaagent` qui ne modifie ni le jeu, ni ses fichiers. Il s'injecte au niveau de la JVM (au lancement, ou à chaud si le jeu tourne déjà), ce qui le rend indépendant du launcher :
 
 | | |
-|---|---|
 | Launchers | officiel, SKLauncher, Prism, CurseForge, ATLauncher, Modrinth App |
 | Instances | n'importe quelle version, n'importe quel profil, en parallèle |
 | Installation | une seule fois, un clic ; l'agent s'active ensuite partout |
