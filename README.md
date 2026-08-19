@@ -37,6 +37,8 @@ Mods keep the usual loader rules: Irium-native mods first, Fabric / Forge / NeoF
 
 **Server side.** To stream mods, a server must be enrolled with the Irium platform and hold a valid authentication key. An unenrolled server or an invalid key gets nothing — the agent rejects it. Every module is signed and verified before it runs.
 
+**Why authentication exists.** Irium streams real code into players' JVMs — that power must never be anonymous. Without a trust chain, any server could push disguised malware into players' machines: steal data, damage files, mine crypto. Enrollment is what makes the ecosystem safe: trusted servers stream, untrusted ones get nothing. It is also what keeps the platform compliant with Mojang's usage rules. The goal is a technology that is 100% safe for players.
+
 ```text
         vanilla client
               │
@@ -98,7 +100,7 @@ Elastic License 2.0 — see [LICENSE](LICENSE).
 
 Almost everything is open: the plugin, the Microsoft Store app (free), and the Irium API used to write Irium-safe mods or include mods potential into your plugins. You can read, modify, and redistribute all of it, including commercially.
 
-One part is not open: the authentication component of the plugin. It ships as a closed binary, and the license forbids circumventing it. Server enrollment is handled remotely by the platform — validation is free for test and small servers, paid for large ones (which include support and services). Adding or removing a server never requires a code change.
+One part is not open: the authentication component of the plugin. It ships as a closed binary, and the license forbids circumventing it. This includes creating or recreating an authentication system, or building any bypass of it — even by modifying the open code. Doing so is a direct violation of the license and of copyright law; the authentication is what protects players from malicious servers. Server enrollment is handled remotely by the platform — validation is free for test and small servers, paid for large ones (which include support and services). Adding or removing a server never requires a code change.
 
 In short: the code is free, the trust chain is protected.
 
