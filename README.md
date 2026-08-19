@@ -96,7 +96,7 @@ This project builds on five years of technical research: how far a vanilla clien
 
 Elastic License 2.0 — see [LICENSE](LICENSE).
 
-Almost everything is open: the plugin, the Microsoft Store app (free), and the Irium API used to write Irium-safe mods. You can read, modify, and redistribute all of it, including commercially.
+Almost everything is open: the plugin, the Microsoft Store app (free), and the Irium API used to write Irium-safe mods or include mods potential into your plugins. You can read, modify, and redistribute all of it, including commercially.
 
 One part is not open: the authentication component of the plugin. It ships as a closed binary, and the license forbids circumventing it. Server enrollment is handled remotely by the platform — validation is free for test and small servers, paid for large ones (which include support and services). Adding or removing a server never requires a code change.
 
