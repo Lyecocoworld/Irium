@@ -6,14 +6,14 @@
   <br/>
 
   <p>
-    <a href="#status"><img src="docs/img/badge-status.svg" alt="Status: in development"/></a>
+    <a href="#statut"><img src="docs/img/badge-status.svg" alt="Status: in development"/></a>
     <a href="plugin/pom.xml"><img src="docs/img/badge-version.svg" alt="Irium v0.1.0"/></a>
     <a href="#compatibilité"><img src="docs/img/badge-mc.svg" alt="Minecraft 26.1.2+"/></a>
     <a href="LICENSE"><img src="docs/img/badge-license.svg" alt="License MIT"/></a>
-    <a href="#technologie" ><img src="docs/img/badge-java.svg" alt="Java 21+"/></a>
+    <a href="#technologie"><img src="docs/img/badge-java.svg" alt="Java 21+"/></a>
   </p>
 
-  <p><strong>Le serveur devient la plateforme de modding.<br/>Le client reste vanilla.</strong></p>
+  <p><strong>Le serveur gère le client et le serveur.<br/>C'est du streaming de mods pur et dur.</strong></p>
 </div>
 
 ---
@@ -28,14 +28,49 @@ fabric installer  →  api  →  14 mods  →  versions  →  dépendances  → 
 
 Et à refaire pour chaque serveur, chaque modpack, chaque mise à jour. Irium supprime cette route.
 
-Irium est une plateforme de modding **server-driven** : le serveur héberge le runtime, les modules et le contenu ; le client n'exécute qu'un agent minimal installé une seule fois. Chaque serveur Irium fournit ensuite dynamiquement tout ce dont le joueur a besoin — HUD, interfaces riches, rendering, keybinds, gameplay — directement dans la session de jeu.
+Irium est une plateforme de modding **server-driven** : le serveur héberge le runtime, les modules, les dépendances et le contenu. Le client n'exécute qu'un agent JVM minimal installé une seule fois. Chaque serveur Irium fournit ensuite dynamiquement tout ce dont le joueur a besoin — HUD, interfaces riches, rendering, keybinds, gameplay — directement dans la session de jeu. **Le module est le produit ; les packs sont le filet.**
+
+## Comment ça fonctionne
+
+### 1 · L'agent JVM — une installation, tous les launchers
+
+L'agent est un `javaagent` d'environ 300 Ko qui ne modifie **ni le jeu, ni ses fichiers**. Il s'injecte au niveau de la JVM (`premain` au lancement, attach à chaud si le jeu tourne déjà), ce qui le rend indépendant du launcher :
+
+| | |
+|---|---|
+| Launchers | officiel, SKLauncher, Prism, CurseForge, ATLauncher, Modrinth App — tout ce qui lance une JVM |
+| Instances | n'importe quelle version, n'importe quel profil, plusieurs instances en parallèle |
+| Installation | une seule fois, via l'app (un clic) ; l'agent s'active ensuite partout, automatiquement |
+| Contenu | rien d'autre que le protocole — ASM, runtime, crypto. Toutes les features vivent côté serveur |
+
+L'agent ne grandira jamais. Il ne contient aucune feature : il est la **porte**, pas la maison.
+
+### 2 · La chaîne de confiance — un serveur non validé n'obtient rien
+
+L'agent joue aussi le rôle de **clé d'authentification**. La règle est simple :
+
+```text
+serveur enrôlé + manifest signé + agent authentique  →  expérience complète
+serveur non enrôlé, clé invalide, signature absente  →  rien du tout
+```
+
+Concrètement : un opérateur qui installerait le système Irium sur son serveur **sans enrôlement validé par la plateforme** ne streamera rien. L'agent rejette ses manifests, le joueur reste sur l'expérience vanilla de base (datapacks et resource packs standards). C'est la condition pour que la technologie soit sûre pour les joueurs — et sereine pour les serveurs légitimes :
+
+- chaque serveur est enrôlé et identifié auprès de la plateforme ;
+- chaque manifest de modules est signé (Ed25519) et vérifié avant exécution ;
+- révocation possible (liste de révocation, kill-switch) ;
+- sandbox de session : tout ce que le serveur ajoute disparaît à la déconnexion — le client redevient vanilla, comportementalement.
+
+### 3 · Streaming pur — le serveur pilote les deux bouts
+
+C'est le cœur de la technologie : **un seul côté à développer, un seul côté à déployer**. Le serveur compile, signe et sert les modules ; l'agent les télécharge, les vérifie et les exécute dans le client.
 
 ```text
         client vanilla
               │
               ▼
     agent irium · ~300 Ko · installé 1×
-              │   handshake · manifest · signature
+              │   enrôlement · manifest signé · signature vérifiée
               ▼
     serveur irium ─── runtime ─ modules ─ api ─ contenu
               │
@@ -44,14 +79,46 @@ Irium est une plateforme de modding **server-driven** : le serveur héberge le r
     tout apparaît dans la session · tout disparaît en quittant
 ```
 
+Le dual-track reste actif en permanence : un joueur sans agent (ou un serveur non enrôlé) reçoit l'expérience de base via packs ; un joueur équipé sur un serveur enrôlé reçoit le flux complet. Les modules peuvent être activés à chaud, en pleine session.
+
+### 4 · Plugins et mods — deux voies, une plateforme
+
+Irium réunit les deux mondes qui étaient séparés depuis toujours :
+
+| Voie | Rôle | Ce qu'elle gagne |
+|---|---|---|
+| **Plugins** (le cerveau) | logique serveur : économie, persistance, gameplay, grades | l'accès aux super-pouvoirs des mods via l'**API Irium** — HUD, interfaces riches, rendering, input — sans jamais quitter le modèle plugin |
+| **Modules** (la peau) | ce que le serveur streame au client | un runtime signé, sandboxé, chargé à la demande |
+
+Les deux voies communiquent par un pont d'événements (`irium.event.*`) : un plugin déclenche, le module affiche. Un serveur Paper classique peut donc offrir une expérience visuelle équivalente à un modpack, sans qu'aucun joueur n'installe quoi que ce soit.
+
+### 5 · Compatibilité loaders — une voie à la fois, comme un vrai loader
+
+La compatibilité Fabric / Forge / NeoForge suivra les règles réelles des loaders, pas de magie :
+
+- **une voie par instance** : le serveur choisit Fabric *ou* Forge *ou* NeoForge — exactement comme un joueur choisit son loader aujourd'hui ;
+- **pas de cross-compatibilité gratuite** : un mod d'une autre voie ne fonctionnera pas, sauf via un pont précis, construit au cas par cas ;
+- **le gateway est la dernière phase** du projet — pas la première. On ne promet pas de faire tourner l'écosystème existant tel quel ; on construit d'abord notre propre fondation.
+
+### 6 · L'API native d'abord — plus simple, plus safe
+
+Avant tout gateway de compatibilité, Irium fournit sa propre API de développement :
+
+- décrire un module (HUD, UI, rendering, input) **sans écrire de code client** quand c'est possible ;
+- des manifestes validés au build — les conflits module/module sont éliminés par design ;
+- signatures, permissions et sandbox intégrés dès la première ligne de code.
+
+Et porter un mod existant est peu coûteux : **le fonctionnement global du mod est conservé** (items, blocs, logique, registries). Seule la **couche communication** change — les canaux du loader sont remplacés par le protocole Irium, le serveur orchestrant la synchronisation. La majorité des mods ne demandent donc qu'un rework ciblé, pas une réécriture.
+
 ## Principes
 
 | | |
 |---|---|
 | **Le module est le produit** | Les resource packs et datapacks sont le filet de sécurité, pas le cœur. La valeur vient du code streamé. |
 | **Session sandbox** | Tout ce que le serveur ajoute disparaît à la déconnexion. Le client redevient vanilla, comportementalement. |
-| **Dual-track** | Joueur sans agent : expérience de base (packs). Joueur équipé : expérience complète (code). |
-| **Agent minimal éternel** | ~300 Ko, rien d'autre que le protocole — ASM, runtime, crypto. Il ne grandira jamais. Toutes les features vivent côté serveur. |
+| **Agent minimal éternel** | ~300 Ko, rien d'autre que le protocole. Il ne grandira jamais. Toutes les features vivent côté serveur. |
+| **Confiance vérifiée** | Serveurs enrôlés, manifests signés, révocation possible. Un serveur non validé n'obtient rien. |
+| **Une voie loader à la fois** | Fabric, Forge ou NeoForge — les règles des loaders restent vraies. Les ponts viennent en dernier. |
 
 ## Architecture
 
@@ -64,12 +131,12 @@ Irium est une plateforme de modding **server-driven** : le serveur héberge le r
                         │  │               │  └─────┬──────┘  │
                         │  └───────────────┘        │         │
                         └───────────────────────────┼─────────┘
-                                                    │ tls
+                                                    │ tls · signature
                         ┌───────────────────────────┼─────────┐
                         │            serveur        │         │
                         │  ┌────────────────────────▼───────┐ │
                         │  │ irium hub · runtime · modules  │ │
-                        │  │ signatures · cache · sandbox   │ │
+                        │  │ enrôlement · cache · sandbox   │ │
                         │  └────────────────────────────────┘ │
                         │         ▲          ▲         ▲      │
                         │   plugins   economy   persistence   │
@@ -91,23 +158,19 @@ Rapports complets en français dans [`docs/research/`](docs/research/) :
 
 ## Statut
 
-<span id="status"></span>
-
-Development phase 0 — construction des fondations. Rien n'est utilisable en production.
+Phase 0 — construction des fondations. Rien n'est utilisable en production.
 
 | Jalon | Contenu | État |
 |---|---|---|
 | **J1** | Plugin serveur : dialog de consentement natif, fallback chat, persistance, canal `irium:hello`, Folia-safe | **fait** |
 | **J2** | Agent JVM : injection HUD dans une session live (PoC) | **suivant** |
-| **Phase 1** | Handshake complet + capability manifest | planifié |
+| **Phase 1** | Handshake complet + manifest de capacités | planifié |
 | **Phase 2** | Streaming de modules signés + cache vérifié | planifié |
-| **Phase 3** | Session sandbox complète + hot loading | planifié |
-| **Phase 4** | Irium Studio (devkit) + API publique | planifié |
-| **Phase 5** | Pont de compatibilité Fabric (3 tiers) | planifié |
+| **Phase 3** | Session sandbox complète + hot loading + enrôlement serveurs | planifié |
+| **Phase 4** | API native (plugins ↔ modules) + devkit | planifié |
+| **Phase 5** | Gateway de compatibilité Fabric / Forge / NeoForge (3 tiers) | dernier |
 
 ## Compatibilité
-
-<span id="compatibilit"></span>
 
 | Élément | Statut |
 |---|---|
@@ -115,19 +178,17 @@ Development phase 0 — construction des fondations. Rien n'est utilisable en pr
 | Clients vanilla ≥ 1.21.7 (protocole 767+) | dialog natif |
 | Clients plus anciens | fallback chat cliquable |
 | Agent | recherche validée (lab JDK 25), binaire non distribué |
-| Fabric / Forge / NeoForge | pont 3 tiers planifié (tier 1 : extraction d'assets) |
+| Mods Fabric / Forge / NeoForge | gateway 3 tiers — dernière phase, une voie à la fois |
 
 ## Technologie
-
-<span id="technologie"></span>
 
 | Composant | Choix |
 |---|---|
 | Serveur | Paper / Canvas / Folia — plugin Maven, `paper-api 26.1.2.build.74-stable` |
 | Langage | Java 21 |
-| Agent | Java agent (premain + attach), ASM, Ed25519 |
-| Signature | Ed25519 sur manifestes et modules |
-| Distribution | Microsoft Store (runFullTrust), fallback exe signé |
+| Agent | javaagent (premain + attach à chaud), ASM, Ed25519 |
+| Signature | Ed25519 sur manifests et modules · révocation centralisée |
+| Distribution | application un clic (Store, runFullTrust), fallback exe signé |
 
 ## Structure
 
