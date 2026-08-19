@@ -28,9 +28,10 @@ fail(){ echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 WORK="$REPO/harness/.work"
 rm -rf "$WORK"; mkdir -p "$WORK"
 JAVAC="/c/Program Files/Eclipse Adoptium/jdk-25.0.3.9-hotspot/bin/javac"
-"$JAVAC" -d "$WORK" harness/IriumBot.java harness/Handshake.java \
+( cd harness && "$JAVAC" -d .work IriumBot.java Handshake.java ) \
   && pass "harnais compilé (IriumBot + Handshake)" \
   || fail "compilation harnais"
+ls "$WORK"/IriumBot.class >/dev/null 2>&1 && pass "IriumBot.class présent" || fail "IriumBot.class absent"
 BOTCP="C:/Users/space/Code/Irium/harness/.work"  # forme native pour java.exe
 
 echo "=== [1] Build canonique (Maven, cmd.exe) ==="
