@@ -94,4 +94,12 @@ This project builds on five years of technical research: how far a vanilla clien
 
 ## License
 
-Elastic License 2.0 — see [LICENSE](LICENSE). The code is free to use, study, modify, and redistribute; the only restrictions: don't offer it as a hosted service, don't remove or obscure licensing notices, and don't circumvent the license key. Independent project, not affiliated with Mojang Studios or Microsoft. Minecraft is a trademark of Mojang Studios.
+Elastic License 2.0 — see [LICENSE](LICENSE).
+
+Almost everything is open: the plugin, the Microsoft Store app (free), and the Irium API used to write Irium-safe mods. You can read, modify, and redistribute all of it, including commercially.
+
+One part is not open: the authentication component of the plugin. It ships as a closed binary, and the license forbids circumventing it. Server enrollment is handled remotely by the platform — validation is free for test and small servers, paid for large ones (which include support and services). Adding or removing a server never requires a code change.
+
+In short: the code is free, the trust chain is protected.
+
+Independent project, not affiliated with Mojang Studios or Microsoft. Minecraft is a trademark of Mojang Studios.
