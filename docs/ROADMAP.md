@@ -47,23 +47,35 @@ The trust chain, exercised end to end:
 
 - Exit: module code executing in the client JVM, with the signature deliberately corrupted in a second run to prove refusal.
 
-### M4 — First recipe (HUD)
+### M4 — Module streaming (DONE 2026-08-20, `031b07c`)
 
 The visible proof:
 
-- One transformation recipe: inject a hook into the GUI render path (class + method targeted per Minecraft version, anchor hash checked).
+- Server pushes compiled class files (`.irm`) on `irium:module`: BEGIN (sha256
+  manifest, auto-extracted class name) → CHUNK → ACTIVATE.
+- Agent reassembles, verifies sha256, defines the class in a dedicated
+  per-session classloader, calls `onEnable()`; module calls `emit()` to talk
+  back (server logs the event).
+- Sandbox: on disconnect everything the server added is dropped (modules
+  disabled, classloader abandoned).
+- Security: tampered payloads refused (`sha256 MISMATCH -> refus de chargement`),
+  zero modules loaded — proven e2e with the `irium.test.tamper` lab flag.
+- Exit: `harness/verify-m4.sh` 13/13 PASS. Agent 0.4.0 (~152 Ko), plugin 0.3.0.
+  Client used in the proof (VanillaNoIq) still knows nothing about Irium.
+
+### M5 — First recipe (HUD) + session sandbox hardening
+
+The visible proof:
+
+- One transformation recipe: inject a hook into the GUI render path (class +
+  method targeted per Minecraft version, anchor hash checked).
 
 - A one-line HUD drawn by the loaded module ("Irium linked").
 
-- Exit: screenshot of a vanilla client, zero modification installed, showing the HUD — plus the graceful fallback (recipe absent = clean vanilla, no crash).
-
-### M5 — Session sandbox
-
-Everything the server adds disappears on disconnect:
-
-- Modules deactivated, hooks iterating empty lists, resource packs popped, settings snapshot restored.
-
-- Exit: log-documented sequence join → module active → disconnect → state byte-identical to vanilla.
+- Exit: screenshot of a vanilla client, zero modification installed, showing
+  the HUD — plus the graceful fallback (recipe absent = clean vanilla, no crash)
+  and the full join → module active → disconnect → state identical to vanilla
+  sequence.
 
 ### M6+ — Hardening and platform
 
