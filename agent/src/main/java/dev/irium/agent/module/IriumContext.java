@@ -11,4 +11,11 @@ public interface IriumContext {
 
     /** Émet un événement vers le serveur (canal irium:module, type EVENT). */
     void emit(String tag, String data);
+
+    /**
+     * M5 : enregistre un renderer appelé à chaque tick de la méthode hookée
+     * par la recette (équivalent générique du HudRenderCallback de Fabric).
+     * Retiré automatiquement à la fermeture de session.
+     */
+    void hud(Runnable renderer);
 }

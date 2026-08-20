@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class IriumAgent {
 
     private static final AtomicBoolean ACTIVE = new AtomicBoolean(false);
+    private static volatile Instrumentation INSTR; // M5 : retransformation à chaud des recettes
 
     private IriumAgent() {
     }
@@ -47,8 +48,15 @@ public final class IriumAgent {
             }
 
             log("[" + mode + "] Minecraft detected -> registering netty hook (M3) + observation transformer");
-            inst.addTransformer(new NettyHook(), false);
+            INSTR = inst;
+            inst.addTransformer(new NettyHook(), true);          // retransformable : marche en attach à chaud
+            inst.addTransformer(new dev.irium.agent.module.RecipeTransformer(), true); // M5 : retransformation autorisée
             inst.addTransformer(new ObservationTransformer(), true);
+            if (hotAttach) {
+                // client déjà lancé : netty est déjà chargé, on le retransforme
+                // pour que les PROCHAINES connexions installent le tap.
+                retransformLoaded("io.netty.channel.DefaultChannelPipeline");
+            }
         } catch (Throwable t) {
             // A client agent must NEVER break the host process.
             log("[" + mode + "] bootstrap failed, staying dormant: " + t);
@@ -57,6 +65,24 @@ public final class IriumAgent {
 
     public static void log(String message) {
         System.err.println("[irium] " + message);
+    }
+
+    /** M5 : retransforme une classe déjà chargée (recette reçue après chargement). */
+    public static void retransformLoaded(String fqcn) {
+        Instrumentation instr = INSTR;
+        if (instr == null) return;
+        try {
+            for (Class<?> c : instr.getAllLoadedClasses()) {
+                if (c.getName().equals(fqcn)) {
+                    instr.retransformClasses(c);
+                    IriumAgent.log("[recette] retransformation demandée pour " + fqcn);
+                    return;
+                }
+            }
+            // pas encore chargée : le transformer l'attrapera à sa définition
+        } catch (Throwable t) {
+            IriumAgent.log("[recette] retransformation impossible : " + t);
+        }
     }
 
     /** Diagnostic verbeux (labo). */

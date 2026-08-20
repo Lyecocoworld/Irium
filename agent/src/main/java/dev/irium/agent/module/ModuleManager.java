@@ -89,6 +89,23 @@ public final class ModuleManager {
                 }
             }
             case 0x03 -> activate();
+            case 0x04 -> { // RECIPE (M5)
+                String target = readStr(body);
+                String method = readStr(body);
+                String desc = readStr(body);
+                String anchorHex = readStr(body);
+                String bridge = readStr(body);
+                Recipe r = Recipe.of(target, method, desc, anchorHex, bridge);
+                if (r == null) {
+                    IriumAgentLike.log("[recette] format invalide -> refus");
+                } else {
+                    RecipeStore.add(r);
+                    IriumAgentLike.log("[recette] reçue : " + target + "." + method + desc
+                            + " (ancre " + anchorHex.substring(0, 8) + "..)");
+                    // si la classe est DÉJÀ chargée, retransformer à chaud
+                    IriumAgentLike.retransform(target.replace('/', '.'));
+                }
+            }
             default -> IriumAgentLike.log("[module] type inconnu 0x" + Integer.toHexString(type));
         }
     }
@@ -159,6 +176,8 @@ public final class ModuleManager {
             try { mod.onDisable(); } catch (Throwable ignored) {}
         }
         m.modules.clear();
+        RecipeStore.clearAll();            // M5 : plus aucune recette active
+        dev.irium.agent.hud.HudBridge.clearAll(); // plus aucun renderer
         IriumAgentLike.log("[module] session fermée : " + n + " module(s) désactivé(s), classloader abandonné");
     }
 
@@ -168,6 +187,9 @@ public final class ModuleManager {
         @Override public void log(String message) { IriumAgentLike.log("[mod] " + message); }
         @Override public void emit(String tag, String data) {
             channel.eventLoop().execute(() -> emitEvent(tag, data));
+        }
+        @Override public void hud(Runnable renderer) {
+            dev.irium.agent.hud.HudBridge.register(renderer);
         }
     }
 
@@ -207,9 +229,10 @@ public final class ModuleManager {
         b.writeBytes(x);
     }
 
-    /** Indirection de log (l'API module ne doit pas dépendre d'IriumTap). */
+    /** Indirection de log/action (l'API module ne doit pas dépendre d'IriumTap). */
     static final class IriumAgentLike {
         private IriumAgentLike() {}
         static void log(String m) { dev.irium.agent.IriumAgent.log(m); }
+        static void retransform(String fqcn) { dev.irium.agent.IriumAgent.retransformLoaded(fqcn); }
     }
 }

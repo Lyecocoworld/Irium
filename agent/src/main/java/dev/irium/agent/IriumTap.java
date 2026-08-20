@@ -51,8 +51,20 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
 
     static void install(ChannelPipeline p) {
         if (p.get("decoder") == null) {
-            IriumAgent.log("[tap] pas de handler 'decoder' -> pas une connexion MC, ignoré");
-            return;
+            // Les connexions MC réelles ajoutent parfois packet_handler AVANT
+            // decoder (ordre non garanti selon la version) : on attend decoder
+            // au lieu d'abandonner. install() est rappelé à chaque handler ajouté.
+            return; // silencieux : rappelé à chaque addLast/addBefore nommé
+        }
+        if (p.get(NAME) != null) {
+            // déjà installé : repositionner UNIQUEMENT si un handler s'est
+            // glissé entre le tap et decoder (ex: decompress ajouté après coup)
+            var names = p.names();
+            for (int i = 0; i < names.size() - 1; i++) {
+                if (names.get(i).equals(NAME) && names.get(i + 1).equals("decoder")) {
+                    return; // déjà bien placé, rien à faire
+                }
+            }
         }
         // ancre : TOUJOURS 'decoder'. decompress est toujours immédiatement avant
         // decoder -> addBefore("decoder") place le tap APRÈS decompress quand il

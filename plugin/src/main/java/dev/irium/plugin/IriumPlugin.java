@@ -135,6 +135,7 @@ public final class IriumPlugin extends JavaPlugin {
 
     private HandshakeListener handshake;
     private ModulePusher modulePusher;
+    private RecipePusher recipePusher;
 
     HandshakeListener handshake() {
         return handshake;
@@ -156,6 +157,7 @@ public final class IriumPlugin extends JavaPlugin {
                 // M4 : pousser les modules dès qu'un client est classé AGENT
                 if (classified.classification() == HandshakeListener.Classification.AGENT) {
                     modulePusher.pushAll(classified.player());
+                    pushRecipes(classified.player());
                 }            });
         }
     }
@@ -189,6 +191,17 @@ public final class IriumPlugin extends JavaPlugin {
     }
 
     /* ---------------- commande ---------------- */
+
+    /** M5 : pousse la recette HUD (26.2 : Hud.extractRenderState) aux clients AGENT. */
+    private void pushRecipes(Player player) {
+        if (recipePusher == null) recipePusher = new RecipePusher(this);
+        // ancre = sha256 du Hud.class ORIGINAL du client 26.2 vanilla
+        recipePusher.push(player,
+                "net/minecraft/client/gui/Hud",
+                "extractRenderState",
+                "(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V",
+                "84956c01232288bea7c4cb36da0d140af9d250b0a8f79995dfcabddfb72041f0");
+    }
 
     /** Liste les modules chargés dans plugins/Irium/modules. */
     public String[] listModules() {

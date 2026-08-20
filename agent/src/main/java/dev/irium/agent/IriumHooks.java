@@ -14,11 +14,9 @@ public final class IriumHooks {
 
     public static void onHandlerAdded(ChannelPipeline p, String name) {
         try {
-            if (name == null) return;
-            boolean interesting = "packet_handler".equals(name)      // fin de setup d'une connexion MC
-                    || "decompress".equals(name);                    // compression activée -> repositionner le tap
-            if (!interesting) return;
-
+            if (name == null || name.isEmpty()) return;
+            // Tout handler nommé peut précéder 'decoder' dans l'ordre d'ajout :
+            // on tente l'installation à chaque fois (idempotent si déjà en place).
             Channel ch = p.channel();
             Runnable task = () -> {
                 try {
