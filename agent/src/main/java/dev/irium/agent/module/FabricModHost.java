@@ -63,10 +63,76 @@ public final class FabricModHost {
 
     /** Mods armes pour CE boot : modId -> sha256hex (rempli au premain). */
     static final Map<String, String> ARMED = new ConcurrentHashMap<>();
-    /** Vrai si ce boot a ete arme par Irium (agent arg = boot:host:port). */
+    /** Vrai si ce boot a ete arme par Irium (arg boot: OU attach avec cache). */
     static volatile boolean bootedByIrium;
     /** host:port arme pour ce boot (si bootedByIrium). */
     static volatile String armedServer;
+    /** Dernier MODSET reçu par serveur : host -> (clé jar -> sha256hex). */
+    static final Map<String, Map<String, String>> LAST_MODSET = new ConcurrentHashMap<>();
+    /** Jars effectivement en cache : host -> (clé jar -> sha256hex). */
+    static final Map<String, Map<String, String>> CACHED = new ConcurrentHashMap<>();
+
+    /** M7-B7 : le serveur a annoncé son set -> mémoriser (pour cacheCompleteFor). */
+    public static void rememberModset(String host, Map<String, String> modset) {
+        if (host != null && !modset.isEmpty()) LAST_MODSET.put(host, new ConcurrentHashMap<>(modset));
+    }
+
+    /** M7-B7 : tous les jars annoncés par le MODSET sont-ils en cache (sha ok) ? */
+    public static boolean cacheCompleteFor(String host) {
+        Map<String, String> want = LAST_MODSET.get(host);
+        if (want == null || want.isEmpty()) return false;
+        Map<String, String> have = CACHED.get(host);
+        if (have == null) return false;
+        for (Map.Entry<String, String> e : want.entrySet()) {
+            String sha = have.get(e.getKey());
+            if (sha == null || !sha.equals(e.getValue())) return false;
+        }
+        return true;
+    }
+
+    /**
+     * M7-B7 ATTACH À CHAUD : armer les caches de TOUS les serveurs connus.
+     * Le watcher attache AVANT que MC ne définisse ses classes -> les configs
+     * mixin s'appliquent À LA DÉFINITION (légal JVMTI), zéro restart. Si la
+     * course est perdue (classes déjà définies), le MODSET déclenchera la
+     * relance auto en fallback.
+     */
+    public static void armFromCache() {
+        int armed = 0;
+        try {
+            java.nio.file.Path root = java.nio.file.Path.of(
+                    System.getProperty("user.home"), ".irium", "servers");
+            if (!java.nio.file.Files.exists(root)) return;
+            try (var stream = java.nio.file.Files.list(root)) {
+                for (java.nio.file.Path dir : (Iterable<java.nio.file.Path>) stream::iterator) {
+                    if (!java.nio.file.Files.isDirectory(dir)) continue;
+                    try (var jars = java.nio.file.Files.list(dir)) {
+                        for (java.nio.file.Path jar : (Iterable<java.nio.file.Path>) jars::iterator) {
+                            if (!jar.toString().endsWith(".jar")) continue;
+                            String key = jar.getFileName().toString().replaceAll("\\.jar$", "");
+                            try {
+                                byte[] bytes = java.nio.file.Files.readAllBytes(jar);
+                                ModJarMeta meta = metaOfJar(bytes);
+                                if (meta == null || meta.id == null) continue;
+                                installInternal(bytes, true);
+                                ARMED.put(key, sha256Hex(bytes));
+                                armed++;
+                            } catch (Throwable t) {
+                                IriumAgent.log("[attach-arm] échec " + jar.getFileName() + ": " + t);
+                            }
+                        }
+                    }
+                }
+            }
+            if (armed > 0) {
+                bootedByIrium = true; // ce boot est armé -> MODSET match -> pas de relance
+                IriumAgent.log("[attach-arm] " + armed + " mod(s) armé(s) depuis le cache "
+                        + "(transform à la définition)");
+            }
+        } catch (Throwable t) {
+            IriumAgent.log("[attach-arm] impossible: " + t);
+        }
+    }
 
     static String safeName(String host) { return host.replaceAll("[^A-Za-z0-9._-]", "_"); }
 

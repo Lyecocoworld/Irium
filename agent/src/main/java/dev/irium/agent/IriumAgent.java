@@ -61,6 +61,11 @@ public final class IriumAgent {
             // appendToSystemClassLoaderSearch).
             if (bootArm) {
                 dev.irium.agent.module.FabricModHost.armForBoot(args);
+            } else if (hotAttach) {
+                // M7-B7 : attach à chaud SANS arg boot: (watcher). Si le watcher a
+                // attrapé le process tôt, les classes MC ne sont pas encore définies
+                // -> armer depuis le cache = transform à la définition, zéro restart.
+                dev.irium.agent.module.FabricModHost.armFromCache();
             }
             if (hotAttach) {
                 // client déjà lancé : netty est déjà chargé, on le retransforme

@@ -49,15 +49,29 @@ public final class ModuleManager {
 
     private ModuleManager(Channel channel) { this.channel = channel; }
 
-    /** M7-B6 : déclenche la relance auto (idempotent). */
+    /** M7-B6 : déclenche la relance auto (idempotent, anti-boucle). */
     private void scheduleRelaunch(String host, int delayMs) {
         if (relaunchStarted) return;
         relaunchStarted = true;
         Thread t = new Thread(() -> {
             try { Thread.sleep(delayMs); } catch (InterruptedException ignored) {}
+            if (!dev.irium.agent.module.ClientRelaunch.mayRelaunch()) {
+                IriumAgentLike.log("[module] relance annulée (déjà relancé ce boot ou norelaunch)");
+                return;
+            }
+            // tous les jars sont-ils déjà en cache ? sinon attendre leur arrivée
+            int waited = delayMs;
+            while (IriumAgentLike.currentHost() != null && waited < 120000) {
+                if (dev.irium.agent.module.FabricModHost.cacheCompleteFor(host)) {
+                    IriumAgentLike.log("[module] cache complet -> relance immédiate");
+                    break;
+                }
+                try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+                waited += 500;
+            }
             IriumAgentLike.log("[module] RELANCE AUTO -> " + host + " (set armé à jour au prochain boot)");
             dev.irium.agent.module.ClientRelaunch.relaunch(host);
-        }, "irium-relaunch");
+        }, "irium-complete");
         t.setDaemon(true);
         t.start();
     }
@@ -123,6 +137,17 @@ public final class ModuleManager {
                 String host = IriumAgentLike.currentHost();
                 if (host != null) {
                     dev.irium.agent.module.FabricModHost.cacheJar(host, r.manifestId, bytes);
+                    // M7-B7 : mémoriser le sha du jar mis en cache (pour cacheCompleteFor)
+                    String shaHex = dev.irium.agent.module.FabricModHost.sha256HexPub(bytes);
+                    dev.irium.agent.module.FabricModHost.CACHED.computeIfAbsent(host, k -> new java.util.concurrent.ConcurrentHashMap<>())
+                            .put(r.manifestId, shaHex);
+                    // cache complet -> relancer MAINTENANT (le nouveau boot armera le cache)
+                    if (pendingRelaunch != null
+                            && dev.irium.agent.module.FabricModHost.cacheCompleteFor(host)) {
+                        IriumAgentLike.log("[module] cache complet (" + r.manifestId + ") -> relance");
+                        scheduleRelaunch(pendingRelaunch, 0);
+                        return; // ne pas installer dans CE boot (entrypoints crasheraient)
+                    }
                 }
                 dev.irium.agent.module.FabricModHost.install(bytes);
             }
@@ -136,6 +161,7 @@ public final class ModuleManager {
                 }
                 String host = IriumAgentLike.currentHost();
                 IriumAgentLike.log("[module] MODSET reçu: " + modset.keySet() + " (host=" + host + ")");
+                dev.irium.agent.module.FabricModHost.rememberModset(host, modset);
                 if (host != null && !dev.irium.agent.module.FabricModHost.isArmedFor(modset)) {
                     IriumAgentLike.log("[module] set non armé dans ce boot -> relance auto vers " + host);
                     // attendre la fin du streaming des jars (ils arrivent après), la
