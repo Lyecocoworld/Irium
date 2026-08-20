@@ -290,7 +290,7 @@ public final class ModuleManager {
         private IriumAgentLike() {}
         static void log(String m) { dev.irium.agent.IriumAgent.log(m); }
         static void retransform(String fqcn) { dev.irium.agent.IriumAgent.retransformLoaded(fqcn); }
-        /** Host du serveur courant (pour le cache par serveur), ou null. */
+        /** Host:port du serveur courant (clé de cache), ou null. */
         static String currentHost() {
             try {
                 io.netty.channel.Channel ch = dev.irium.agent.IriumTap.currentChannel();
@@ -299,7 +299,11 @@ public final class ModuleManager {
                 String s = String.valueOf(sa);
                 int slash = s.indexOf('/');
                 int colon = s.lastIndexOf(':');
-                if (slash >= 0 && colon > slash) return s.substring(slash + 1, colon);
+                if (slash >= 0 && colon > slash) {
+                    String hostPart = s.substring(slash + 1, colon);
+                    String portPart = s.substring(colon + 1).replaceAll("[^0-9]", "");
+                    return portPart.isEmpty() ? hostPart : hostPart + ":" + portPart;
+                }
             } catch (Throwable ignored) {}
             return null;
         }

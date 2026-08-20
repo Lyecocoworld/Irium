@@ -120,15 +120,18 @@ public final class FabricModHost {
             try (var stream = java.nio.file.Files.list(dir)) {
                 for (java.nio.file.Path jar : (Iterable<java.nio.file.Path>) stream::iterator) {
                     if (!jar.toString().endsWith(".jar")) continue;
+                    String key = jar.getFileName().toString().replaceAll("\\.jar$", "");
                     try {
                         byte[] bytes = java.nio.file.Files.readAllBytes(jar);
                         ModJarMeta meta = metaOfJar(bytes);
                         if (meta == null || meta.id == null) continue;
                         installInternal(bytes, true);
-                        ARMED.put(meta.id, sha256Hex(bytes));
-                        IriumAgent.log("[boot] mod arme: " + meta.id + " (" + jar.getFileName() + ")");
+                        // clé = nom de fichier du cache (MÊME clé que MODSET serveur et
+                        // que manifestId des trames BEGIN — jamais meta.id)
+                        ARMED.put(key, sha256Hex(bytes));
+                        IriumAgent.log("[boot] mod armé: " + meta.id + " (clé " + key + ")");
                     } catch (Throwable t) {
-                        IriumAgent.log("[boot] echec armement " + jar.getFileName() + ": " + t);
+                        IriumAgent.log("[boot] échec armement " + jar.getFileName() + ": " + t);
                     }
                 }
             }
@@ -162,6 +165,13 @@ public final class FabricModHost {
         return true;
     }
 
+
+    /* ---------------- ponts de test (harnais) ---------------- */
+
+    public static java.nio.file.Path serverDirPub(String host) throws Exception { return serverDir(host); }
+    public static java.util.Map<String, String> ARMED_PUB() { return ARMED; }
+    public static String sha256HexPub(byte[] b) { return sha256Hex(b); }
+
     /* ---------------- chargement ---------------- */
 
     public static synchronized void install(byte[] modJarBytes) {
@@ -186,7 +196,15 @@ public final class FabricModHost {
         if (meta.id == null || meta.id.isBlank()) { IriumAgent.log("[fabric-mod] id absent -> refus"); return; }
 
         if (MODS.containsKey(meta.id)) {
-            IriumAgent.log("[fabric-mod] mod '" + meta.id + "' deja charge -> ignore");
+            // M7-B6 : déjà ARMÉ au boot -> ce join active les entrypoints (le
+            // mixins/configs sont déjà en place depuis le premain)
+            Mod existing = MODS.get(meta.id);
+            IriumAgent.log("[fabric-mod] mod '" + meta.id + "' déjà armé -> activation entrypoints");
+            runEntrypoint(existing, "main", net.fabricmc.api.ModInitializer.class, mi -> mi.onInitialize());
+            runEntrypoint(existing, "client", net.fabricmc.api.ClientModInitializer.class, ci -> ci.onInitializeClient());
+            if (dev.irium.agent.IriumTap.currentChannel() != null) {
+                dev.irium.agent.IriumTap.fireJoinLate();
+            }
             return;
         }
 
