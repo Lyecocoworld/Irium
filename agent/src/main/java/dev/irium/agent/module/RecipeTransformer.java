@@ -36,10 +36,13 @@ public final class RecipeTransformer implements ClassFileTransformer {
             Recipe r = RecipeStore.match(className);
             if (r == null) return null;
 
-            byte[] hash = sha256(classfileBuffer);
-            if (!MessageDigest.isEqual(hash, r.anchor())) {
+            byte[] hash = MethodAnchor.canonicalHash(classfileBuffer, r.method(), r.desc());
+            if (hash == null || !MessageDigest.isEqual(hash, r.anchor())) {
                 if (RecipeStore.isApplied(className)) return null; // retransform post-patch : silencieux
-                IriumAgent.log("[recette] ancre INVALIDE pour " + className + " -> recette refusée, host intact");
+                StringBuilder hex = new StringBuilder();
+                for (byte b : hash == null ? new byte[0] : hash) hex.append(String.format("%02x", b));
+                IriumAgent.log("[recette] ancre INVALIDE pour " + className + " -> recette refusée, host intact"
+                        + " (calculée=" + hex + ", attendue=" + r.anchorHex() + ")");
                 return null;
             }
             if (RecipeStore.isApplied(className)) return null; // déjà patché

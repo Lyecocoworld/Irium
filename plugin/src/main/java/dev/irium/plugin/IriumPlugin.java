@@ -200,7 +200,9 @@ public final class IriumPlugin extends JavaPlugin {
                 "net/minecraft/client/gui/Hud",
                 "extractRenderState",
                 "(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V",
-                "84956c01232288bea7c4cb36da0d140af9d250b0a8f79995dfcabddfb72041f0");
+                // ancre canonique MÉTHODE-SEULE (stable vanilla ↔ launcher-transformé)
+                // hash classe entière vanilla = 84956c01.., SKL run = 801cf641../1e8a64f3.. (instable, abandonné)
+                "ba286b1707fbb7e349a16faab718f3eaae87f659c08a62a2786a58c66aa74243");
     }
 
     /** Liste les modules chargés dans plugins/Irium/modules. */

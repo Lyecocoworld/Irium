@@ -12,6 +12,13 @@ package dev.irium.agent.module;
  */
 record Recipe(String target, String method, String desc, byte[] anchor, String bridge) {
 
+    /** Ancre en hex pour les logs (jamais utilisée pour la comparaison). */
+    String anchorHex() {
+        StringBuilder sb = new StringBuilder(64);
+        for (byte b : anchor) sb.append(String.format("%02x", b));
+        return sb.toString();
+    }
+
     static Recipe of(String target, String method, String desc, String anchorHex, String bridge) {
         if (target == null || method == null || desc == null || bridge == null
                 || anchorHex == null || anchorHex.length() != 64) {
