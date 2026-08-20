@@ -26,6 +26,11 @@
       <artifactId>asm-commons</artifactId>
       <version>9.9.1</version>
     </dependency>
+    <dependency>
+      <groupId>org.ow2.asm</groupId>
+      <artifactId>asm-util</artifactId>
+      <version>9.9.1</version>
+    </dependency>
     <!-- Mixin officiel Fabric (service custom Irium via ServiceLoader) -->
     <dependency>
       <groupId>net.fabricmc</groupId>
@@ -87,12 +92,10 @@
                   <pattern>org.objectweb.asm</pattern>
                   <shadedPattern>dev.irium.shaded.asm</shadedPattern>
                 </relocation>
-                <!-- Mixin relocalisé : refs internes org/objectweb/asm réécrites vers shaded,
-                     collisions impossibles avec libs launcher (asm 9.2-9.9 présentes) -->
-                <relocation>
-                  <pattern>org.spongepowered</pattern>
-                  <shadedPattern>dev.irium.shaded.mixin</shadedPattern>
-                </relocation>
+                <!-- PIÈGE M7-B4 : NE PAS relocaliser org.spongepowered ! Les classes mixin
+                     des mods externes portent l'annotation Lorg/spongepowered/asm/mixin/Mixin;
+                     (descriptor ORIGINAL). Un runtime relocalisé cherche son propre descriptor
+                     -> "missing @Mixin annotation" -> aucun mixin jamais appliqué. -->
               </relocations>
               <filters>
                 <!-- services originaux exclus : on déclare NOTRE service Irium (interfaces relocalisées) -->

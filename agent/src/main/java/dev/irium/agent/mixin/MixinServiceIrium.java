@@ -150,10 +150,14 @@ public final class MixinServiceIrium implements IMixinService {
     static final class ClassTracker implements IClassTracker {
         private final Set<String> invalid = new HashSet<>();
         @Override public void registerInvalidClass(String name) { synchronized (invalid) { invalid.add(name); } }
-        @Override public boolean isClassLoaded(String name) {
-            try { Class.forName(name, false, ClassLoader.getSystemClassLoader()); return true; }
-            catch (ClassNotFoundException e) { return false; }
-        }
+        /**
+         * Attach à chaud : TOUTES les classes du jeu sont déjà chargées quand nos
+         * configs mixin arrivent. Le check standard de Mixin (rejeter si cible déjà
+         * chargée) est donc inapplicable — nous appliquons via retransformClasses,
+         * qui repasse les classes dans notre transformer. Répondre "false" laisse
+         * Mixin préparer tous les mixins ; l'application réelle se fait en retransform.
+         */
+        @Override public boolean isClassLoaded(String name) { return false; }
         @Override public String getClassRestrictions(String name) { return ""; }
     }
 

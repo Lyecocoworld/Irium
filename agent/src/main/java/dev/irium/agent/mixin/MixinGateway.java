@@ -38,8 +38,22 @@ public final class MixinGateway {
         instrumentation = inst;
         try {
             MixinBootstrap.init();
-            MixinEnvironment env = MixinEnvironment.getEnvironment(MixinEnvironment.Phase.INIT);
+            // Racine M7-B4 : à l'attach à chaud, PERSONNE n'a instancié le MixinTransformer
+            // (c'est normalement le rôle du launcher hôte). getActiveTransformer() = null
+            // pour toujours -> transform() no-op silencieux -> retransform sans effet.
+            // MixinTransformer est package-private : instanciation par réflexion.
             Object t = MixinEnvironment.getEnvironment(MixinEnvironment.Phase.DEFAULT).getActiveTransformer();
+            if (!(t instanceof IMixinTransformer)) {
+                Class<?> mtClass = Class.forName(
+                        "org.spongepowered.asm.mixin.transformer.MixinTransformer");
+                java.lang.reflect.Constructor<?> ctor = mtClass.getDeclaredConstructor();
+                ctor.setAccessible(true);
+                t = ctor.newInstance();
+                if (!(t instanceof IMixinTransformer)) {
+                    throw new IllegalStateException("MixinTransformer instancié n'implémente pas IMixinTransformer");
+                }
+                // Le constructeur s'est auto-enregistré comme transformer actif de l'env DEFAULT
+            }
             if (t instanceof IMixinTransformer imt) transformer = imt;
             inst.addTransformer(new IriumMixinTransformer(), true);
             log("Mixin runtime prêt (transformer=" + (transformer != null) + ")");
