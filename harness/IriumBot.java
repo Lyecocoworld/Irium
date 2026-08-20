@@ -6,14 +6,12 @@ import java.util.zip.DeflaterOutputStream;
 import java.util.zip.Inflater;
 
 /**
- * Bot de test Irium M2 — protocole 776 (Canvas 26.2).
+ * Bot de test Irium — protocole 776 (Canvas 26.2).
  * Modes :
- *   vanilla : reste connecté, ne répond JAMAIS au challenge irium -> doit être classé VANILLA (timeout).
- *   agent   : répond au challenge irium:hello avec le codec -> doit être classé AGENT v0.1.0.
- *
- * IDs PLAY (ordre d'enregistrement GameProtocols, extraits du bytecode) :
- *   clientbound : ... 0x18 custom_payload ... keep_alive ~0x20+ (on matche par heuristique)
- *   serverbound : 0x18 custom_payload, keep_alive id variable -> on scanne
+ *   vanilla : ne répond JAMAIS au challenge irium -> classé VANILLA.
+ *   agent   : répond au challenge irium:hello -> classé AGENT.
+ *   voice   : agent + canaux voicechat:* + réponse request_secret + UDP auth
+ *             -> doit faire apparaître le joueur dans le voice server du mod.
  */
 public class IriumBot {
     static int compression = -1;
@@ -23,10 +21,21 @@ public class IriumBot {
     static long nonceVal;
     static boolean agentReplied = false;
     static long start = System.currentTimeMillis();
+    static String mode = "vanilla";
+
+    /** Canaux SVC que le mod client register au PLAY. */
+    static final String[] VOICE_CHANNELS = {
+            "voicechat:request_secret", "voicechat:update_state", "voicechat:player_state",
+            "voicechat:player_states", "voicechat:remove_player_state", "voicechat:secret",
+            "voicechat:add_category", "voicechat:remove_category", "voicechat:add_group",
+            "voicechat:remove_group", "voicechat:join_group", "voicechat:create_group",
+            "voicechat:leave_group", "voicechat:joined_group"
+    };
 
     public static void main(String[] a) throws Exception {
-        String mode = a.length > 0 ? a[0] : "vanilla";
-        String name = mode.equals("agent") ? "IriumAgent" : "PlainVani";
+        mode = a.length > 0 ? a[0] : "vanilla";
+        String name = a.length > 1 && !a[1].isEmpty() ? a[1]
+                : (mode.equals("vanilla") ? "PlainVani" : mode.equals("voice") ? "VoiceBot" : "IriumAgent");
         int lifetime = a.length > 2 ? Integer.parseInt(a[2]) : 20000;
         System.out.println("[bot:" + mode + "] connexion 25599 pour " + lifetime + " ms");
         try (Socket s = new Socket("127.0.0.1", 25599)) {
@@ -56,71 +65,209 @@ public class IriumBot {
                         else if (pid == 0x03) { send(out, 0x03, w -> {}); state = "play"; System.out.println("[bot:" + mode + "] PLAY"); }
                         else if (pid == 0x02) { System.out.println("DISCONNECT(config): " + strAt(d, r[1])); return; }
                     }
-                    case "play" -> handlePlay(mode, out, d, r);
+                    case "play" -> handlePlay(out, d, r);
                 }
             }
             System.out.println("[bot:" + mode + "] fin de session normale (" + lifetime + " ms)");
-            // POST-MORTEM: classification observée côté bot
             System.out.println("[bot:" + mode + "] challenge vu=" + challengeSeen
-                    + " réponse envoyée=" + agentReplied);
+                    + " réponse envoyée=" + agentReplied + " secret=" + (secretHex == null ? "non reçu" : secretHex.substring(0, 16) + ".."));
         }
     }
 
-    /* -------- PLAY : register des canaux (comme le fera l'agent), keepalive, challenge -------- */
-    static void handlePlay(String mode, DataOutputStream out, byte[] d, int[] r) throws IOException {
+    static String secretHex;
+    static int voicePort = 24454;
+    static DatagramSocket udp;
+    static boolean udpAuthenticated = false;
+
+    /* -------- PLAY : register, keepalive, challenge, voicechat -------- */
+    static void handlePlay(DataOutputStream out, byte[] d, int[] r) throws IOException {
         int pid = r[0];
-        if (!registered && mode.equals("agent")) {
-            // L'agent Irium fera exactement ça : déclarer ses canaux au serveur dès le PLAY.
-            // Un client vanilla ne register JAMAIS irium:hello -> le serveur droppe le challenge.
-            // custom_payload serverbound = 0x16 (23e enregistré), body = canaux \0-séparés
-            send(out, 0x16, w -> { str(w, "minecraft:register"); w.write("irium:hello".getBytes(StandardCharsets.UTF_8)); });
-            registered = true;
-            System.out.println("[bot:" + mode + "] minecraft:register irium:hello envoyé");
-        }
-        // DEBUG: dump horodaté de tout ce qui arrive en PLAY
         System.out.println("[t+" + (System.currentTimeMillis() - start) + "ms] play pid=0x"
-                + Integer.toHexString(pid) + " len=" + d.length + " hex=" + hex(d, Math.min(24, d.length)));
+                + Integer.toHexString(pid) + " len=" + d.length + " hex=" + hex(d, Math.min(32, d.length)));
+        if (!registered && !mode.equals("vanilla")) {
+            // canaux irium + voicechat, comme le vrai client SVC le ferait
+            send(out, 0x16, w -> { str(w, "minecraft:register"); w.write("irium:hello".getBytes(StandardCharsets.UTF_8)); });
+            StringBuilder chans = new StringBuilder();
+            for (String c : VOICE_CHANNELS) chans.append(c).append('\0');
+            send(out, 0x16, w -> { str(w, "minecraft:register"); w.write(chans.toString().getBytes(StandardCharsets.UTF_8)); });
+            registered = true;
+            System.out.println("[bot:" + mode + "] minecraft:register irium:hello + " + VOICE_CHANNELS.length + " canaux voicechat");
+            // SVC : demande de secret — RequestSecretPacket.fromBytes lit readInt() (4 octets fixes)
+            send(out, 0x16, w -> { str(w, "voicechat:request_secret"); w.writeInt(20); });
+            System.out.println("[bot:voice] voicechat:request_secret envoyé (compat=20, int fixe)");
+        }
         // custom_payload clientbound = 0x18
         if (pid == 0x18) {
-            String chan = strAt(d, r[1]);
-            int dataOff = r[1] + varIntAt(d, r[1])[1] - r[1] + (strAt(d, r[1]).length() > 0 ? 0 : 0);
-            if (chan.equals("irium:hello")) {
-                // data = le reste du paquet après le canal
-                int chanLen = strAt(d, r[1]).getBytes(StandardCharsets.UTF_8).length;
-                // recalcul propre : r[1] pointe après le pid ; varInt longueur du canal puis canal puis data
-                int p = r[1];
-                int[] lr = varIntAt(d, p);
-                p = lr[1] + lr[0]; // début des données
-                byte[] body = Arrays.copyOfRange(d, p, d.length);
-                if (body.length >= 12 && body[0] == 'I' && body[1] == 'R') {
-                    challengeSeen = true;
-                    nonceVal = 0;
-                    for (int i = 0; i < 8; i++) nonceVal = (nonceVal << 8) | (body[4 + i] & 0xFF);
-                    System.out.println("[bot:" + mode + "] CHALLENGE irium nonce=0x" + Long.toHexString(nonceVal));
-                    if (mode.equals("agent") && !agentReplied) {
-                        agentReplied = true;
-                        byte[] resp = Handshake.encodeAgentResponse(nonceVal, "0.1.0", 0x1F);
-                        send(out, 0x16, w -> { str(w, "irium:hello"); w.write(resp); });
-                        System.out.println("[bot:agent] réponse AGENT envoyée (v0.1.0, caps=0x1F)");
+            int p = r[1];
+            int[] lr = varIntAt(d, p);
+            String chan = new String(d, lr[1], lr[0], StandardCharsets.UTF_8);
+            int dataOff = lr[1] + lr[0];
+            byte[] body = Arrays.copyOfRange(d, dataOff, d.length);
+            switch (chan) {
+                case "irium:hello" -> {
+                    if (body.length >= 12 && body[0] == 'I' && body[1] == 'R') {
+                        challengeSeen = true;
+                        nonceVal = 0;
+                        for (int i = 0; i < 8 && 4 + i < body.length; i++) nonceVal = (nonceVal << 8) | (body[4 + i] & 0xFF);
+                        System.out.println("[bot:" + mode + "] CHALLENGE irium nonce=0x" + Long.toHexString(nonceVal));
+                        if (!mode.equals("vanilla") && !agentReplied) {
+                            agentReplied = true;
+                            byte[] resp = Handshake.encodeAgentResponse(nonceVal, "0.1.0", 0x1F);
+                            send(out, 0x16, w -> { str(w, "irium:hello"); w.write(resp); });
+                            System.out.println("[bot:agent] réponse AGENT envoyée (v0.1.0, caps=0x1F)");
+                        }
                     }
-                } else {
-                    System.out.println("[bot:" + mode + "] payload irium non-challenge (" + body.length + "B)");
+                }
+                case "voicechat:secret" -> {
+                    secretHex = hex(body, Math.min(64, body.length));
+                    System.out.println("[bot:voice] SECRET reçus (" + body.length + "B) hex=" + secretHex);
+                    parseSecretAndAuth(body);
+                }
+                default -> {
+                    if (chan.startsWith("voicechat:")) {
+                        System.out.println("[bot:voice] " + chan + " (" + body.length + "B)");
+                    }
                 }
             }
             return;
         }
-        // keep_alive play : id varlong juste après le pid. Garde-fou : ignorer les paquets
-        // sans body (pid seul) et les valeurs non-epoch (les autres paquets courts).
-        if (r[1] < d.length && d.length <= 10) {
-            long id = varLongAt(d, r[1]);
-            if (id > 1_500_000_000_000L) {
-                send(out, 0x1C, w -> varLong(w, id)); // serverbound keep_alive play = 0x1C (29e)
-                return;
-            }
+        // keep_alive play clientbound = 0x2C (44e enregistré, GameProtocols), body = long FIXE 8 octets
+        // (pas varlong) — on écho les octets bruts sur serverbound keep_alive 0x1C
+        if (pid == 0x2C && d.length >= 9) {
+            byte[] body = Arrays.copyOfRange(d, r[1], d.length);
+            send(out, 0x1C, w -> w.write(body));
+            return;
         }
     }
 
-    /* ---------------- transport ---------------- */
+    /* ---------------- SVC UDP : auth + keepalive + mic ---------------- */
+    // SecretPacket.fromBytes : secret[n] || int port || uuid || byte codec || int mtu || double dist || int keepalive || bool groups || utf host || bool recording
+    static byte[] secretBytes; static UUID playerUUID; static int kaMs; static String voiceHost;
+    static void parseSecretAndAuth(byte[] body) {
+        try {
+            int p = 0;
+            int secLen = 16; // GCM-128 : 56B observés - (4+16+1+4+8+4+1+2+1) = 16
+            byte[] sec = Arrays.copyOfRange(body, p, p + secLen); p += secLen;
+            secretBytes = sec;
+            int port = readIntBE(body, p); p += 4;
+            playerUUID = new UUID(readLongBE(body, p), readLongBE(body, p + 8)); p += 16;
+            int codec = body[p++] & 0xFF;
+            int mtu = readIntBE(body, p); p += 4;
+            double dist = Double.longBitsToDouble(readLongBE(body, p)); p += 8;
+            kaMs = readIntBE(body, p); p += 4;
+            boolean groups = body[p++] != 0;
+            int[] lr = varIntAt(body, p); String host = new String(body, lr[1], lr[0], StandardCharsets.UTF_8); p = lr[1] + lr[0];
+            boolean recording = body[p] != 0;
+            voiceHost = host.isEmpty() ? "127.0.0.1" : host;
+            System.out.println("[bot:voice] secret=" + hex(sec, sec.length) + " port=" + port + " uuid=" + playerUUID
+                    + " codec=" + codec + " mtu=" + mtu + " dist=" + dist + " ka=" + kaMs + "ms host=" + voiceHost);
+            if (udp != null) return; // déjà démarré
+            udp = new DatagramSocket();
+            udp.setSoTimeout(2000);
+            Thread t = new Thread(() -> {
+                try { udpAuthLoop(port); }
+                catch (Exception e) { System.out.println("[bot:voice] UDP ERR: " + e); }
+            }, "svc-udp");
+            t.setDaemon(true); t.start();
+        } catch (Exception e) {
+            System.out.println("[bot:voice] parse secret échec: " + e);
+        }
+    }
+
+    static int readIntBE(byte[] d, int o) { return ((d[o]&0xFF)<<24)|((d[o+1]&0xFF)<<16)|((d[o+2]&0xFF)<<8)|(d[o+3]&0xFF); }
+    static long readLongBE(byte[] d, int o) { long v=0; for (int i=0;i<8;i++) v=(v<<8)|(d[o+i]&0xFF); return v; }
+
+    // wire AUTH : 0xFF || playerUUID(16) || AES-GCM-128(secret)[ IV(12) || ct(type=5||uuid||secret16) || tag16 ]
+    static void udpAuthLoop(int port) throws Exception {
+        System.out.println("[bot:voice] UDP auth vers " + voiceHost + ":" + port);
+        byte[] auth = buildAuthPacket();
+        long deadline = System.currentTimeMillis() + 15000;
+        int attempt = 0;
+        while (System.currentTimeMillis() < deadline && !udpAuthenticated) {
+            udp.send(new DatagramPacket(auth, auth.length, InetAddress.getByName(voiceHost), port));
+            attempt++;
+            if (attempt <= 3 || attempt % 10 == 0) System.out.println("[bot:voice] AUTH #" + attempt + " envoyé (" + auth.length + "B)");
+            try {
+                byte[] buf = new byte[4096];
+                DatagramPacket resp = new DatagramPacket(buf, buf.length);
+                udp.receive(resp);
+                byte[] data = Arrays.copyOfRange(resp.getData(), 0, resp.getLength());
+                System.out.println("[bot:verb] UDP reçus " + data.length + "B hex=" + hex(data, Math.min(48, data.length)));
+                if (data.length > 1 && data[0] == (byte) 0xFF) {
+                    // ACK ? le server envoie : 0xFF || UUID || ... ; on décode shallow
+                    System.out.println("[bot:voice] *** RÉPONSE UDP VOICE CHAT *** (len=" + data.length + ")");
+                    udpAuthenticated = true;
+                    startVoiceStreaming();
+                }
+            } catch (SocketTimeoutException ste) { /* retry */ }
+        }
+        System.out.println("[bot:voice] UDP auth " + (udpAuthenticated ? "RÉUSSIE après " + attempt + " essais" : "échouée (pas de réponse)"));
+    }
+
+    static byte[] buildAuthPacket() throws Exception {
+        // plaintext = type(1)=5 || uuid(16) || secret(16)
+        ByteArrayOutputStream pt = new ByteArrayOutputStream();
+        pt.write(5);
+        pt.write(long2b(playerUUID.getMostSignificantBits())); pt.write(long2b(playerUUID.getLeastSignificantBits()));
+        pt.write(secretBytes);
+        return wrapEncrypted(pt); // 0xFF || uuid || varint(len) || GCM
+    }
+
+    static byte[] long2b(long v) { byte[] b = new byte[8]; for (int i = 7; i >= 0; i--) { b[i] = (byte) v; v >>= 8; } return b; }
+    static byte[] aesGcmEncrypt(byte[] key, byte[] data) throws Exception {
+        byte[] iv = new byte[12]; new java.security.SecureRandom().nextBytes(iv);
+        javax.crypto.Cipher c = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+        c.init(javax.crypto.Cipher.ENCRYPT_MODE, new javax.crypto.spec.SecretKeySpec(key, "AES"), new javax.crypto.spec.GCMParameterSpec(128, iv));
+        byte[] ct = c.doFinal(data);
+        byte[] out = new byte[12 + ct.length];
+        System.arraycopy(iv, 0, out, 0, 12); System.arraycopy(ct, 0, out, 12, ct.length);
+        return out;
+    }
+
+    /** Après auth : keepalive UDP (type 8) toutes les ~5s + un mic packet factice. */
+    static void startVoiceStreaming() {
+        Thread t = new Thread(() -> {
+            try {
+                // mic de test : OPUS silence factice
+                Thread.sleep(1000);
+                byte[] mic = buildMicPacket(new byte[0], false, System.currentTimeMillis());
+                udp.send(new DatagramPacket(mic, mic.length, InetAddress.getByName(voiceHost), voicePort));
+                System.out.println("[bot:voice] MIC envoyé");
+                while (true) {
+                    Thread.sleep(Math.min(kaMs > 0 ? kaMs : 5000, 10000));
+                    byte[] ka = buildKeepAlivePacket();
+                    udp.send(new DatagramPacket(ka, ka.length, InetAddress.getByName(voiceHost), voicePort));
+                }
+            } catch (Exception e) { System.out.println("[bot:voice] stream ERR: " + e); }
+        }, "svc-stream");
+        t.setDaemon(true); t.start();
+    }
+
+    // type 1 : data || whispering || sequenceNumber
+    static byte[] buildMicPacket(byte[] data, boolean whispering, long seq) throws Exception {
+        ByteArrayOutputStream pt = new ByteArrayOutputStream();
+        pt.write(1);
+        varIntStream(pt, data.length); pt.write(data);
+        pt.write(whispering ? 1 : 0);
+        pt.write(long2b(seq));
+        return wrapEncrypted(pt);
+    }
+    // type 8 : corps vide (KeepAlivePacket ne sérialise rien)
+    static byte[] buildKeepAlivePacket() throws Exception {
+        ByteArrayOutputStream pt = new ByteArrayOutputStream();
+        pt.write(8);
+        return wrapEncrypted(pt);
+    }
+    static byte[] wrapEncrypted(ByteArrayOutputStream pt) throws Exception {
+        byte[] enc = aesGcmEncrypt(secretBytes, pt.toByteArray());
+        ByteArrayOutputStream wire = new ByteArrayOutputStream();
+        wire.write(0xFF);
+        wire.write(long2b(playerUUID.getMostSignificantBits())); wire.write(long2b(playerUUID.getLeastSignificantBits()));
+        varIntStream(wire, enc.length); // FriendlyByteBuf.readByteArray(2048) lit varint len + bytes
+        wire.write(enc);
+        return wire.toByteArray();
+    }
+    static void varIntStream(ByteArrayOutputStream o, int v) { while ((v & 0xFFFFFF80) != 0) { o.write((v & 0x7F) | 0x80); v >>>= 7; } o.write(v); }
     static void send(DataOutputStream out, int pid, W body) throws IOException {
         ByteArrayOutputStream bb = new ByteArrayOutputStream();
         DataOutputStream bw = new DataOutputStream(bb);
@@ -159,7 +306,7 @@ public class IriumBot {
         try (DeflaterOutputStream dd = new DeflaterOutputStream(b)) { dd.write(data); }
         return b.toByteArray();
     }
-    static String hex(byte[] d, int n) { StringBuilder sb = new StringBuilder(); for (int i = 0; i < n; i++) sb.append(String.format("%02x ", d[i])); return sb.toString(); }
+    static String hex(byte[] d, int n) { StringBuilder sb = new StringBuilder(); for (int i = 0; i < n; i++) sb.append(String.format("%02x", d[i])); return sb.toString(); }
     interface W { void write(DataOutputStream w) throws IOException; }
     static void varInt(DataOutputStream w, int v) throws IOException { while ((v & 0xFFFFFF80) != 0) { w.write((v & 0x7F) | 0x80); v >>>= 7; } w.write(v); }
     static void varLong(DataOutputStream w, long v) throws IOException { while ((v & 0xFFFFFFFFFFFFFF80L) != 0) { w.write((int) ((v & 0x7F) | 0x80)); v >>>= 7; } w.write((int) v); }

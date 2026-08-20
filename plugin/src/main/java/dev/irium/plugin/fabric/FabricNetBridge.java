@@ -50,9 +50,26 @@ public final class FabricNetBridge {
             @Override
             public CustomPacketPayload.TypeAndCodec register(CustomPacketPayload.Type type, StreamCodec codec) {
                 CODECS.put(type.id().toString(), new CodecEntry(type, codec));
+                Plugin p = plugin;
+                if (p != null) {
+                    String ch = type.id().toString();
+                    if (!Bukkit.getMessenger().isOutgoingChannelRegistered(p, ch)) {
+                        Bukkit.getMessenger().registerOutgoingPluginChannel(p, ch);
+                    }
+                }
                 return new CustomPacketPayload.TypeAndCodec(type, codec);
             }
         };
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public static <T extends CustomPacketPayload> void registerCodecOut(
+            CustomPacketPayload.Type<T> type, StreamCodec codec, boolean clientbound) {
+        CODECS.put(type.id().toString(), new CodecEntry(type, codec));
+        Plugin p = plugin;
+        if (p != null && clientbound && !Bukkit.getMessenger().isOutgoingChannelRegistered(p, type.id().toString())) {
+            Bukkit.getMessenger().registerOutgoingPluginChannel(p, type.id().toString());
+        }
     }
 
     /* ------------- ServerPlayNetworking ------------- */
@@ -104,8 +121,10 @@ public final class FabricNetBridge {
             byte[] data = new byte[buf.readableBytes()];
             buf.readBytes(data);
             bPlayer.sendPluginMessage(p, payload.type().id().toString(), data);
+            p.getLogger().info("[fabric-bridge] envoyé " + payload.type().id()
+                    + " -> " + bPlayer.getName() + " (" + data.length + "B)");
         } catch (Throwable t) {
-            p.getLogger().warning("[fabric-bridge] encode échec: " + t);
+            p.getLogger().warning("[fabric-bridge] encode/echo échec: " + t);
         }
     }
 
@@ -122,6 +141,9 @@ public final class FabricNetBridge {
                     Unpooled.wrappedBuffer(bytes), nms.level().getServer().registryAccess());
             Object decoded = ((StreamCodec) ce.codec()).decode(buf);
             CustomPacketPayload payload = (CustomPacketPayload) decoded;
+            Plugin pl = plugin;
+            if (pl != null) pl.getLogger().info("[fabric-bridge] " + channel
+                    + " décodé (" + bytes.length + "B) -> handler [" + bPlayer.getName() + "]");
             ((HandlerEntry<CustomPacketPayload>) he).handler().receive(payload, new ContextImpl(nms));
         } catch (Throwable t) {
             Plugin p = plugin;

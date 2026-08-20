@@ -76,6 +76,13 @@
             <scope>system</scope>
             <systemPath>C:/Users/space/irium-test/server/libraries/io/netty/netty-transport/4.2.15.Final/netty-transport-4.2.15.Final.jar</systemPath>
         </dependency>
+        <!-- ASM pour les patches bytecode à la définition (shadé en dev.irium.shaded.asm)
+             9.9.1 = support class file major 69 (Java 25, requis par le mod SVC) -->
+        <dependency>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
+            <version>9.9.1</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -85,6 +92,31 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.1</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals><goal>shade</goal></goals>
+                        <configuration>
+                            <relocations>
+                                <relocation>
+                                    <pattern>org.objectweb.asm</pattern>
+                                    <shadedPattern>dev.irium.shaded.asm</shadedPattern>
+                                </relocation>
+                            </relocations>
+                            <filters>
+                                <filter>
+                                    <artifact>org.ow2.asm:*</artifact>
+                                    <excludes><exclude>META-INF/**</exclude></excludes>
+                                </filter>
+                            </filters>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

@@ -35,7 +35,7 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
     private static final String CHANNEL = "irium:hello";
     private static final String MODULE_CHANNEL = dev.irium.agent.module.ModuleManager.CHANNEL;
 
-    private enum State { LOGIN, CONFIGURATION, PLAY }
+    private enum State { LOGIN, CONFIGURATION, PLAY_PENDING, PLAY }
 
     private State state = State.LOGIN;
     private boolean registered = false;
@@ -131,15 +131,24 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
                 }
             }
             case CONFIGURATION -> {
-                if (pid == 0x03) {                                     // finish -> play
-                    state = State.PLAY;
-                    // DEFERRE : le register ne doit partir qu'APRÈS le finish_ack
-                    // du host (sinon le serveur, encore en CONFIGURATION, kick :
-                    // "unknown packet id 22"). execute() en queue d'eventLoop =
-                    // après la propagation courante (donc après l'ack).
-                    ChannelHandlerContext c = ctx;
-                    ctx.channel().eventLoop().execute(() -> onPlay(c));
+                if (pid == 0x03) {                                     // finish -> attente
+                    state = State.PLAY_PENDING;
+                    // filet de sécurité : si le serveur ne dit plus rien en 3s,
+                    // on tente le register quand même (ne devrait jamais arriver :
+                    // un serveur PLAY émet des paquets immédiatement).
+                    ctx.channel().eventLoop().schedule(() -> {
+                        if (state == State.PLAY_PENDING) onPlay(ctx);
+                    }, 3, java.util.concurrent.TimeUnit.SECONDS);
                 }
+            }
+            case PLAY_PENDING -> {
+                // Le serveur n'émet un paquet PLAY qu'APRÈS avoir décodé notre
+                // acknowledge_configuration (sinon il violerait son propre
+                // protocole). Ce paquet prouve donc que le canal est PLAY côté
+                // serveur : le register ne peut plus le faire kicker.
+                onPlay(ctx);
+                state = State.PLAY;
+                if (pid == 0x18) onCustomPayload(ctx, d, r[1]);
             }
             case PLAY -> {
                 if (pid == 0x18) onCustomPayload(ctx, d, r[1]);        // custom_payload clientbound

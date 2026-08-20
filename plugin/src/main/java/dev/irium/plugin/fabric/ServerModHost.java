@@ -51,7 +51,8 @@ public final class ServerModHost implements Listener {
     /* ---------------- démarrage ---------------- */
 
     public void enable() {
-        Path modsDir = plugin.getDataFolder().getParentFile().toPath().resolve("Irium/mods");
+        FabricNetBridge.init(plugin); // AVANT les mods : les register du mod doivent trouver plugin != null
+        Path modsDir = plugin.getDataFolder().toPath().resolve("mods");
         // mods/ vit à côté du jar du plugin : plugins/Irium/mods/
         modsDir = plugin.getDataFolder().toPath().resolve("mods");
         if (!Files.isDirectory(modsDir)) {
@@ -69,9 +70,31 @@ public final class ServerModHost implements Listener {
             modClassLoader = new URLClassLoader("IriumMods", urls,
                     getClass().getClassLoader()) {
                 @Override protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-                    // mod-first: les classes du mod et ses stubs fabric chargent ici,
-                    // le resto (NMS, bukkit) délègue au parent
                     return super.loadClass(name, resolve);
+                }
+
+                /** Patch à la définition : CommonCompatibilityManager.execute(MinecraftServer, Runnable)
+                 *  fait MinecraftServer.execute() qui lève UnsupportedOperationException sur Folia —
+                 *  on est déjà sur le thread régional du joueur : run direct. Jar intact sur disque. */
+                @Override protected Class<?> findClass(String name) throws ClassNotFoundException {
+                    byte[] bytes = readClassBytes(name);
+                    if (bytes == null) throw new ClassNotFoundException(name);
+                    if (name.equals("de.maxhenkel.voicechat.intercompatibility.CommonCompatibilityManager")) {
+                        bytes = FoliaExecutePatch.patch(bytes);
+                        plugin.getLogger().info("[fabric] patch Folia apply: CommonCompatibilityManager.execute -> run direct");
+                    }
+                    Class<?> c = defineClass(name, bytes, 0, bytes.length);
+                    resolveClass(c);
+                    return c;
+                }
+
+                private byte[] readClassBytes(String name) {
+                    String path = name.replace('.', '/') + ".class";
+                    try (java.io.InputStream is = getResourceAsStream(path)) {
+                        return is == null ? null : is.readAllBytes();
+                    } catch (Exception e) {
+                        return null;
+                    }
                 }
             };
             for (Path jar : jars) startMod(jar);
@@ -79,7 +102,6 @@ public final class ServerModHost implements Listener {
             plugin.getLogger().warning("[fabric] échec chargement mods: " + t);
         }
         Bukkit.getPluginManager().registerEvents(this, plugin);
-        FabricNetBridge.init(plugin);
     }
 
     /* ---------------- entrypoints ---------------- */
@@ -151,7 +173,9 @@ public final class ServerModHost implements Listener {
             Class<?> events = modClassLoader.loadClass("de.maxhenkel.voicechat.events.PlayerEvents");
             Object event = events.getField(fieldName).get(null);
             Object invoker = event.getClass().getMethod("invoker").invoke(event);
-            invoker.getClass().getMethod("accept", Object.class).invoke(invoker, nms);
+            Method accept = invoker.getClass().getMethod("accept", Object.class);
+            accept.setAccessible(true);
+            accept.invoke(invoker, nms);
             plugin.getLogger().info("[fabric] " + fieldName + " → " + p.getName());
         } catch (Throwable t) {
             plugin.getLogger().warning("[fabric] " + fieldName + " échec: " + t);
