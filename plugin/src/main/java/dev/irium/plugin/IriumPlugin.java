@@ -59,13 +59,23 @@ public final class IriumPlugin extends JavaPlugin {
             }
         });
 
+        // M7 : adaptateur Fabric — héberge les mods/ (ex: voicechat) côté serveur
+        modHost = new dev.irium.plugin.fabric.ServerModHost(this);
+        modHost.enable();
+        getServer().getPluginManager().registerEvents(new org.bukkit.event.Listener() {
+            @org.bukkit.event.EventHandler
+            public void onLoaded(org.bukkit.event.server.ServerLoadEvent e) {
+                modHost.fireServerStarted();
+            }
+        }, this);
+
         // Commande /irium (CommandMap legacy-compatible — jamais getCommand() avec paper-plugin.yml)
         registerCommand();
 
         // Join : proposer une fois par joueur (si pas déjà de choix)
         getServer().getPluginManager().registerEvents(new JoinListener(this), this);
 
-        getLogger().info("Irium 0.3.0 (M4) — consent + handshake + modules streamés. Canaux: "
+        getLogger().info("Irium 0.3.0 (M4+M7) — consent + handshake + modules streamés + hébergeur Fabric. Canaux: "
                 + CHANNEL_HELLO + ", " + CHANNEL_MODULE);
     }
 
@@ -136,6 +146,7 @@ public final class IriumPlugin extends JavaPlugin {
     private HandshakeListener handshake;
     private ModulePusher modulePusher;
     private RecipePusher recipePusher;
+    private dev.irium.plugin.fabric.ServerModHost modHost;
 
     HandshakeListener handshake() {
         return handshake;

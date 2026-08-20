@@ -31,6 +31,51 @@
             <version>26.1.2.build.74-stable</version>
             <scope>provided</scope>
         </dependency>
+        <!-- NMS mojang-mappé du serveur de test Canvas 26.2 (build 827) -->
+        <dependency>
+            <groupId>net.minecraft</groupId>
+            <artifactId>canvas-server</artifactId>
+            <version>26.2</version>
+            <scope>system</scope>
+            <systemPath>C:/Users/space/irium-test/server/versions/26.2/canvas-26.2.jar</systemPath>
+        </dependency>
+        <!-- Netty du serveur (RegistryFriendlyByteBuf étend ByteBuf) -->
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-buffer</artifactId>
+            <version>4.2.15.Final</version>
+            <scope>system</scope>
+            <systemPath>C:/Users/space/irium-test/server/libraries/io/netty/netty-buffer/4.2.15.Final/netty-buffer-4.2.15.Final.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-common</artifactId>
+            <version>4.2.15.Final</version>
+            <scope>system</scope>
+            <systemPath>C:/Users/space/irium-test/server/libraries/io/netty/netty-common/4.2.15.Final/netty-common-4.2.15.Final.jar</systemPath>
+        </dependency>
+        <!-- Datafixers (Pair, référencé par les signatures NMS) -->
+        <dependency>
+            <groupId>com.mojang</groupId>
+            <artifactId>datafixerupper</artifactId>
+            <version>10.0.21</version>
+            <scope>system</scope>
+            <systemPath>C:/Users/space/irium-test/server/libraries/com/mojang/datafixerupper/10.0.21/datafixerupper-10.0.21.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>com.mojang</groupId>
+            <artifactId>authlib</artifactId>
+            <version>9.0.75</version>
+            <scope>system</scope>
+            <systemPath>C:/Users/space/irium-test/server/libraries/com/mojang/authlib/9.0.75/authlib-9.0.75.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-transport</artifactId>
+            <version>4.2.15.Final</version>
+            <scope>system</scope>
+            <systemPath>C:/Users/space/irium-test/server/libraries/io/netty/netty-transport/4.2.15.Final/netty-transport-4.2.15.Final.jar</systemPath>
+        </dependency>
     </dependencies>
 
     <build>
