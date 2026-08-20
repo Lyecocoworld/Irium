@@ -36,6 +36,8 @@ public final class IriumAgent {
         }
         String mode = hotAttach ? "attach" : "premain";
         boolean force = args != null && args.contains("force");
+        // M7-B6 : boot:host:port -> armer les mods du cache serveur AVANT le boot MC
+        boolean bootArm = args != null && args.startsWith("boot:");
         try {
             HostDetection.Result host = HostDetection.detect();
             log("[" + mode + "] irium-agent 0.3.0 bootstrapping" + (force ? " (force)" : ""));
@@ -49,6 +51,10 @@ public final class IriumAgent {
 
             log("[" + mode + "] Minecraft detected -> registering netty hook (M3) + observation transformer");
             INSTR = inst;
+            // M7-B6 : armer les mods du cache serveur AVANT toute definition MC
+            if (bootArm) {
+                dev.irium.agent.module.FabricModHost.armForBoot(args);
+            }
             inst.addTransformer(new NettyHook(), true);          // retransformable : marche en attach à chaud
             inst.addTransformer(new dev.irium.agent.module.RecipeTransformer(), true); // M5 : retransformation autorisée
             inst.addTransformer(new ObservationTransformer(), true);

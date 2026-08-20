@@ -92,22 +92,24 @@ public final class MixinGateway {
         }
     }
 
-    /** Retransforme des classes déjà chargées (attach à chaud) pour y appliquer les mixins. */
+    /** Retransforme des classes déjà chargées (attach à chaud) pour y appliquer les mixins.
+     *  JVMTI interdit l'ajout de méthodes/interfaces sur classe chargée : une classe
+     *  qui échoue ne doit PAS annuler les autres (batch = tout ou rien). */
     public static void retransform(String... classNames) {
         if (instrumentation == null) return;
-        List<Class<?>> targets = new ArrayList<>();
         for (String n : classNames) {
             try {
                 Class<?> c = Class.forName(n, false, MixinGateway.class.getClassLoader());
-                if (instrumentation.isModifiableClass(c)) targets.add(c);
-            } catch (ClassNotFoundException ignored) {}
-        }
-        if (targets.isEmpty()) return;
-        try {
-            instrumentation.retransformClasses(targets.toArray(new Class<?>[0]));
-            log("retransformation mixin: " + targets.size() + " classes");
-        } catch (Throwable t) {
-            log("retransformation échec: " + t);
+                if (!instrumentation.isModifiableClass(c)) continue;
+                instrumentation.retransformClasses(c);
+                log("retransformé: " + n);
+            } catch (UnsupportedOperationException uoe) {
+                // ex: attempted to add a method — classe chargée avant l'agent
+                log("retransform IMPOSSIBLE (classe déjà chargée, JVMTI): " + n + " — " + uoe.getMessage());
+            } catch (ClassNotFoundException ignored) {
+            } catch (Throwable t) {
+                log("retransform échec " + n + ": " + t);
+            }
         }
     }
 

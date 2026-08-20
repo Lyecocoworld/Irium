@@ -59,46 +59,158 @@ public final class FabricModHost {
         public Map<String, Object> custom;
     }
 
+    /* ---------------- M7-B6 : cache par serveur + armement au boot ---------------- */
+
+    /** Mods armes pour CE boot : modId -> sha256hex (rempli au premain). */
+    static final Map<String, String> ARMED = new ConcurrentHashMap<>();
+    /** Vrai si ce boot a ete arme par Irium (agent arg = boot:host:port). */
+    static volatile boolean bootedByIrium;
+    /** host:port arme pour ce boot (si bootedByIrium). */
+    static volatile String armedServer;
+
+    static String safeName(String host) { return host.replaceAll("[^A-Za-z0-9._-]", "_"); }
+
+    static java.nio.file.Path serverDir(String host) throws java.io.IOException {
+        java.nio.file.Path dir = java.nio.file.Path.of(
+                System.getProperty("user.home"), ".irium", "servers", safeName(host));
+        java.nio.file.Files.createDirectories(dir);
+        return dir;
+    }
+
+    /** Jar en cache pour ce serveur (ou null). */
+    public static java.nio.file.Path cachedJar(String host, String modId) {
+        try {
+            java.nio.file.Path f = serverDir(host).resolve(modId + ".jar");
+            return java.nio.file.Files.exists(f) ? f : null;
+        } catch (Throwable t) { return null; }
+    }
+
+    /** Ecrit un jar dans le cache du serveur. */
+    static void cacheJar(String host, String modId, byte[] jarBytes) {
+        try {
+            java.nio.file.Path f = serverDir(host).resolve(modId + ".jar");
+            java.nio.file.Files.write(f, jarBytes);
+        } catch (Throwable t) {
+            IriumAgent.log("[fabric-mod] echec cache jar " + modId + ": " + t);
+        }
+    }
+
+    /** sha256 hex (null si impossible). */
+    static String sha256Hex(byte[] b) {
+        try {
+            byte[] h = java.security.MessageDigest.getInstance("SHA-256").digest(b);
+            StringBuilder sb = new StringBuilder();
+            for (byte x : h) sb.append(String.format("%02x", x));
+            return sb.toString();
+        } catch (Throwable t) { return null; }
+    }
+
+    /**
+     * PREMAIN : arme les mods du cache du serveur AVANT le boot MC. Configs mixin
+     * enregistrees -> les classes MC se definissent AVEC les mixins (legal :
+     * definition, pas retransform). Entrypoints NON lances ici.
+     * @param arg forme "boot:host:port"
+     */
+    public static void armForBoot(String arg) {
+        try {
+            String host = arg.substring(arg.indexOf(':') + 1);
+            armedServer = host;
+            bootedByIrium = true;
+            java.nio.file.Path dir = serverDir(host);
+            try (var stream = java.nio.file.Files.list(dir)) {
+                for (java.nio.file.Path jar : (Iterable<java.nio.file.Path>) stream::iterator) {
+                    if (!jar.toString().endsWith(".jar")) continue;
+                    try {
+                        byte[] bytes = java.nio.file.Files.readAllBytes(jar);
+                        ModJarMeta meta = metaOfJar(bytes);
+                        if (meta == null || meta.id == null) continue;
+                        installInternal(bytes, true);
+                        ARMED.put(meta.id, sha256Hex(bytes));
+                        IriumAgent.log("[boot] mod arme: " + meta.id + " (" + jar.getFileName() + ")");
+                    } catch (Throwable t) {
+                        IriumAgent.log("[boot] echec armement " + jar.getFileName() + ": " + t);
+                    }
+                }
+            }
+            IriumAgent.log("[boot] armement " + host + ": " + ARMED.size() + " mod(s)");
+        } catch (Throwable t) {
+            IriumAgent.log("[boot] armement impossible: " + t);
+        }
+    }
+
+    /** Parse fabric.mod.json depuis un jar (null si absent/invalide). */
+    static ModJarMeta metaOfJar(byte[] jarBytes) {
+        try {
+            Map<String, byte[]> entries = unzip(jarBytes);
+            byte[] fmj = entries.get("fabric.mod.json");
+            if (fmj == null) return null;
+            return GSON.fromJson(new String(fmj, StandardCharsets.UTF_8), ModJarMeta.class);
+        } catch (Throwable t) { return null; }
+    }
+
+    /**
+     * JOIN : le set du serveur est-il deja arme dans CE boot ?
+     * @param modset modId -> sha256hex
+     */
+    public static boolean isArmedFor(Map<String, String> modset) {
+        if (modset.isEmpty()) return true;
+        if (!bootedByIrium) return false;
+        for (Map.Entry<String, String> e : modset.entrySet()) {
+            String armed = ARMED.get(e.getKey());
+            if (armed == null || !armed.equals(e.getValue())) return false;
+        }
+        return true;
+    }
+
     /* ---------------- chargement ---------------- */
 
     public static synchronized void install(byte[] modJarBytes) {
         try {
-            // FabricLoader.INSTANCE côté client (avant tout code du mod)
-            if (net.fabricmc.loader.impl.FabricLoaderImpl.INSTANCE == null) {
-                net.fabricmc.loader.impl.FabricLoaderImpl.INSTANCE =
-                        new net.fabricmc.loader.impl.FabricLoaderImpl(
-                                new dev.irium.agent.module.FabricLoaderClient());
-            }
-            Map<String, byte[]> entries = unzip(modJarBytes);
-            byte[] fmj = entries.get("fabric.mod.json");
-            if (fmj == null) { IriumAgent.log("[fabric-mod] pas de fabric.mod.json -> refus"); return; }
-            ModJarMeta meta = GSON.fromJson(new String(fmj, StandardCharsets.UTF_8), ModJarMeta.class);
-            if (meta.id == null || meta.id.isBlank()) { IriumAgent.log("[fabric-mod] id absent -> refus"); return; }
+            installInternal(modJarBytes, false);
+        } catch (Throwable t) {
+            IriumAgent.log("[fabric-mod] echec installation: " + t);
+        }
+    }
 
-            if (MODS.containsKey(meta.id)) {
-                IriumAgent.log("[fabric-mod] mod '" + meta.id + "' déjà chargé -> ignoré");
-                return;
-            }
+    private static void installInternal(byte[] modJarBytes, boolean early) throws Exception {
+        // FabricLoader.INSTANCE cote client (avant tout code du mod)
+        if (net.fabricmc.loader.impl.FabricLoaderImpl.INSTANCE == null) {
+            net.fabricmc.loader.impl.FabricLoaderImpl.INSTANCE =
+                    new net.fabricmc.loader.impl.FabricLoaderImpl(
+                            new dev.irium.agent.module.FabricLoaderClient());
+        }
+        Map<String, byte[]> entries = unzip(modJarBytes);
+        byte[] fmj = entries.get("fabric.mod.json");
+        if (fmj == null) { IriumAgent.log("[fabric-mod] pas de fabric.mod.json -> refus"); return; }
+        ModJarMeta meta = GSON.fromJson(new String(fmj, StandardCharsets.UTF_8), ModJarMeta.class);
+        if (meta.id == null || meta.id.isBlank()) { IriumAgent.log("[fabric-mod] id absent -> refus"); return; }
 
-            ModClassLoader loader = new ModClassLoader(entries);
-            // Racine M7-B4-5 : interfaces du mod injectées dans des classes MC -> le jar
-            // doit être visible du loader APP (identité de classe unique, cast possible)
-            java.nio.file.Path modJar = materializeJar(meta.id, entries);
-            MixinGateway.appendModToSystemClassPath(modJar);
-            Mod mod = new Mod(meta.id, meta, loader);
-            MODS.put(meta.id, mod);
+        if (MODS.containsKey(meta.id)) {
+            IriumAgent.log("[fabric-mod] mod '" + meta.id + "' deja charge -> ignore");
+            return;
+        }
 
-            // classes du mod enregistrées pour le dispatch
-            for (String n : entries.keySet()) {
-                if (n.endsWith(".class")) BY_CLASS.put(n.replace('/', '.').replace(".class", ""), mod);
-            }
+        ModClassLoader loader = new ModClassLoader(entries);
+        // Racine M7-B4-5 : interfaces du mod injectees dans des classes MC -> le jar
+        // doit etre visible du loader APP (identite de classe unique, cast possible)
+        java.nio.file.Path modJar = materializeJar(meta.id, entries);
+        MixinGateway.appendModToSystemClassPath(modJar);
+        Mod mod = new Mod(meta.id, meta, loader);
+        MODS.put(meta.id, mod);
 
-            // runtime Mixin prêt à le voir (mixins.json + classes)
-            MixinGateway.registerMod(loader);
+        // classes du mod enregistrees pour le dispatch
+        for (String n : entries.keySet()) {
+            if (n.endsWith(".class")) BY_CLASS.put(n.replace('/', '.').replace(".class", ""), mod);
+        }
 
-            // configs mixin + retransform à chaud des cibles extraites du bytecode
-            if (meta.mixins != null && !meta.mixins.isEmpty()) {
-                for (String cfg : meta.mixins) MixinGateway.addConfig(cfg);
+        // runtime Mixin pret a le voir (mixins.json + classes)
+        MixinGateway.registerMod(loader);
+
+        // configs mixin ; en mode early (premain) on NE retransforme RIEN : les
+        // classes MC pas encore chargees seront transformees a leur definition
+        if (meta.mixins != null && !meta.mixins.isEmpty()) {
+            for (String cfg : meta.mixins) MixinGateway.addConfig(cfg);
+            if (!early) {
                 java.util.LinkedHashSet<String> targets = new java.util.LinkedHashSet<>();
                 for (String cls : entries.keySet()) {
                     if (!cls.endsWith(".class")) continue;
@@ -109,24 +221,25 @@ public final class FabricModHost {
                 }
                 if (!targets.isEmpty()) {
                     MixinGateway.retransform(targets.toArray(new String[0]));
-                    IriumAgent.log("[fabric-mod] " + targets.size() + " cibles mixin retransformées: " + targets);
                 }
             }
+        }
 
-            IriumAgent.log("[fabric-mod] '" + meta.id + "' v" + meta.version + " installé ("
-                    + entries.size() + " entrées, " + countClasses(entries) + " classes)");
+        if (early) {
+            IriumAgent.log("[fabric-mod] '" + meta.id + "' arme au boot (configs mixin only)");
+            return; // entrypoints au join, pas avant le boot MC
+        }
 
-            // entrypoints : d'abord main, puis client
-            runEntrypoint(mod, "main", net.fabricmc.api.ModInitializer.class, mi -> mi.onInitialize());
-            runEntrypoint(mod, "client", net.fabricmc.api.ClientModInitializer.class, ci -> ci.onInitializeClient());
+        IriumAgent.log("[fabric-mod] '" + meta.id + "' v" + meta.version + " installe ("
+                + entries.size() + " entrees, " + countClasses(entries) + " classes)");
 
-            // le mod arrive APRÈS le PLAY : re-fire JOIN pour ses receivers
-            if (dev.irium.agent.IriumTap.currentChannel() != null) {
-                dev.irium.agent.IriumTap.fireJoinLate();
-            }
+        // entrypoints : d'abord main, puis client
+        runEntrypoint(mod, "main", net.fabricmc.api.ModInitializer.class, mi -> mi.onInitialize());
+        runEntrypoint(mod, "client", net.fabricmc.api.ClientModInitializer.class, ci -> ci.onInitializeClient());
 
-        } catch (Throwable t) {
-            IriumAgent.log("[fabric-mod] échec installation: " + t);
+        // le mod arrive APRES le PLAY : re-fire JOIN pour ses receivers
+        if (dev.irium.agent.IriumTap.currentChannel() != null) {
+            dev.irium.agent.IriumTap.fireJoinLate();
         }
     }
 

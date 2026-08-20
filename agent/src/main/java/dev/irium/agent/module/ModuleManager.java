@@ -43,8 +43,24 @@ public final class ModuleManager {
     private final Channel channel;
     private final Map<String, IriumModule> modules = new HashMap<>();
     private Rx rx;
+    /** M7-B6 : relance en attente (host cible) si le set serveur != boot armé. */
+    private volatile String pendingRelaunch;
+    private volatile boolean relaunchStarted;
 
     private ModuleManager(Channel channel) { this.channel = channel; }
+
+    /** M7-B6 : déclenche la relance auto (idempotent). */
+    private void scheduleRelaunch(String host, int delayMs) {
+        if (relaunchStarted) return;
+        relaunchStarted = true;
+        Thread t = new Thread(() -> {
+            try { Thread.sleep(delayMs); } catch (InterruptedException ignored) {}
+            IriumAgentLike.log("[module] RELANCE AUTO -> " + host + " (set armé à jour au prochain boot)");
+            dev.irium.agent.module.ClientRelaunch.relaunch(host);
+        }, "irium-relaunch");
+        t.setDaemon(true);
+        t.start();
+    }
 
     public static ModuleManager of(Channel ch) {
         ModuleManager m = ch.attr(KEY).get();
@@ -102,9 +118,31 @@ public final class ModuleManager {
                     IriumAgentLike.log("[module] MODJAR sha256 MISMATCH -> refus (module '" + r.manifestId + "')");
                     return;
                 }
-                IriumAgentLike.log("[module] MODJAR '" + r.manifestId + "' reçu (" + bytes.length + " octets, sha256 ok) -> installation");
-                // installation sur le thread de rendu si dispo, sinon direct
+                IriumAgentLike.log("[module] MODJAR '" + r.manifestId + "' reçu (" + bytes.length + " octets, sha256 ok)");
+                // M7-B6 : cache par serveur, puis activation OU relance
+                String host = IriumAgentLike.currentHost();
+                if (host != null) {
+                    dev.irium.agent.module.FabricModHost.cacheJar(host, r.manifestId, bytes);
+                }
                 dev.irium.agent.module.FabricModHost.install(bytes);
+            }
+            case 0x06 -> { // MODSET (M7-B6) : manifeste du serveur AVANT les jars
+                int n = body.readUnsignedByte();
+                java.util.Map<String, String> modset = new java.util.LinkedHashMap<>();
+                for (int i = 0; i < n; i++) {
+                    String id = readStr(body);
+                    String shaHex = readStr(body);
+                    modset.put(id, shaHex);
+                }
+                String host = IriumAgentLike.currentHost();
+                IriumAgentLike.log("[module] MODSET reçu: " + modset.keySet() + " (host=" + host + ")");
+                if (host != null && !dev.irium.agent.module.FabricModHost.isArmedFor(modset)) {
+                    IriumAgentLike.log("[module] set non armé dans ce boot -> relance auto vers " + host);
+                    // attendre la fin du streaming des jars (ils arrivent après), la
+                    // relance partira sur MODJAR-complet du dernier jar OU timer
+                    pendingRelaunch = host;
+                    scheduleRelaunch(host, 15000);
+                }
             }
             case 0x04 -> { // RECIPE (M5)
                 String target = readStr(body);
@@ -252,5 +290,18 @@ public final class ModuleManager {
         private IriumAgentLike() {}
         static void log(String m) { dev.irium.agent.IriumAgent.log(m); }
         static void retransform(String fqcn) { dev.irium.agent.IriumAgent.retransformLoaded(fqcn); }
+        /** Host du serveur courant (pour le cache par serveur), ou null. */
+        static String currentHost() {
+            try {
+                io.netty.channel.Channel ch = dev.irium.agent.IriumTap.currentChannel();
+                if (ch == null) return null;
+                java.net.SocketAddress sa = ch.remoteAddress();
+                String s = String.valueOf(sa);
+                int slash = s.indexOf('/');
+                int colon = s.lastIndexOf(':');
+                if (slash >= 0 && colon > slash) return s.substring(slash + 1, colon);
+            } catch (Throwable ignored) {}
+            return null;
+        }
     }
 }

@@ -169,6 +169,7 @@ public final class IriumPlugin extends JavaPlugin {
                         ? " v" + classified.agentVersion() : ""));
                 // M4 : pousser les modules dès qu'un client est classé AGENT
                 if (classified.classification() == HandshakeListener.Classification.AGENT) {
+                    modJarPusher.pushModset(classified.player()); // M7-B6 : manifeste d'abord
                     modulePusher.pushAll(classified.player());
                     modJarPusher.pushAll(classified.player()); // M7-B : mods Fabric streamés
                     pushRecipes(classified.player());

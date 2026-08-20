@@ -90,6 +90,39 @@ public final class ModJarPusher {
         }
     }
 
+    /**
+     * M7-B6 : pousse le MODSET (0x06) — la liste id+sha256hex de tous les mods du
+     * serveur, AVANT les jars. Le client compare avec son boot armé : match ->
+     * activation directe ; mismatch -> il cache les jars puis se relance armé.
+     */
+    public void pushModset(Player player) {
+        String[] files = available();
+        java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream();
+        o.write(0x06);
+        o.write(files.length);
+        for (String f : files) {
+            File jar = new File(modJarsDir, f);
+            try {
+                byte[] bytes = Files.readAllBytes(jar.toPath());
+                String id = f.replaceAll("\\.jar$", "");
+                String shaHex = hex(sha256(bytes));
+                writeStr(o, id);
+                writeStr(o, shaHex);
+            } catch (IOException e) {
+                IriumPlugin.log("modset: lecture " + f + " impossible: " + e.getMessage());
+            }
+        }
+        player.getScheduler().run(plugin, task ->
+                player.sendPluginMessage(plugin, IriumPlugin.CHANNEL_MODULE, o.toByteArray()), () -> {});
+        IriumPlugin.log("modset poussé -> " + player.getName() + " (" + files.length + " mod(s))");
+    }
+
+    static String hex(byte[] b) {
+        StringBuilder sb = new StringBuilder(b.length * 2);
+        for (byte x : b) sb.append(String.format("%02x", x));
+        return sb.toString();
+    }
+
     static byte[] sha256(byte[] b) {
         try {
             return MessageDigest.getInstance("SHA-256").digest(b);
