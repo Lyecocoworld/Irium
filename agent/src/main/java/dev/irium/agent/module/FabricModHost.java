@@ -136,7 +136,16 @@ public final class FabricModHost {
                 T t = (T) o;
                 init.run(t);
             } catch (Throwable t) {
-                IriumAgent.log("[fabric-mod] entrypoint " + key + " " + name + " échec: " + t);
+                StringBuilder sb = new StringBuilder("[fabric-mod] entrypoint " + key + " " + name + " échec: " + t);
+                Throwable c = t.getCause();
+                int depth = 0;
+                while (c != null && depth++ < 8) {
+                    sb.append(" <- cause: ").append(c);
+                    c = c.getCause();
+                }
+                IriumAgent.log(sb.toString());
+                StackTraceElement[] st = t.getStackTrace();
+                for (int i = 0; i < Math.min(6, st.length); i++) IriumAgent.log("    at " + st[i]);
             }
         }
     }
@@ -212,6 +221,12 @@ public final class FabricModHost {
     }
 
     public static boolean isLoaded(String modId) { return MODS.containsKey(modId); }
+
+    /** Test/debug : classloader d'un mod chargé (null si absent). */
+    public static ClassLoader loaderOf(String modId) {
+        Mod m = MODS.get(modId);
+        return m == null ? null : m.loader;
+    }
 
     public static Path configDir() {
         try {

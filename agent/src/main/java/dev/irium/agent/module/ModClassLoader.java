@@ -32,4 +32,52 @@ final class ModClassLoader extends ClassLoader {
         if (b == null) return super.getResourceAsStream(name);
         return new java.io.ByteArrayInputStream(b);
     }
+
+    @Override
+    public java.net.URL getResource(String name) {
+        if (entries.containsKey(name)) return toUrl(name);
+        return super.getResource(name);
+    }
+
+    /** ServiceLoader : TOUTES les URLs matchant (mod + parent). */
+    @Override
+    public java.util.Enumeration<java.net.URL> getResources(String name) throws java.io.IOException {
+        java.util.List<java.net.URL> out = new java.util.ArrayList<>();
+        java.net.URL own = toUrl(name);
+        if (own != null) out.add(own);
+        java.util.Enumeration<java.net.URL> parent_ = super.getResources(name);
+        while (parent_ != null && parent_.hasMoreElements()) out.add(parent_.nextElement());
+        return java.util.Collections.enumeration(out);
+    }
+
+    /** URL bytes:// virtuelle — handler EXPLICITEMENT passé (5-arg ctor), aucune factory globale requise. */
+    private java.net.URL toUrl(String name) {
+        byte[] b = entries.get(name);
+        if (b == null) return null;
+        try {
+            return new java.net.URL("bytes", null, -1, "/" + name, HANDLER);
+        } catch (java.io.IOException e) {
+            return null;
+        }
+    }
+
+    /** Handler du protocole bytes: lit l'entrée depuis la map du loader propriétaire. */
+    private final java.net.URLStreamHandler HANDLER = new java.net.URLStreamHandler() {
+        @Override
+        protected java.net.URLConnection openConnection(java.net.URL u) {
+            return new java.net.URLConnection(u) {
+                @Override public void connect() { connected = true; }
+                @Override public java.io.InputStream getInputStream() {
+                    String p = u.getPath();
+                    byte[] b = entries.get(p.startsWith("/") ? p.substring(1) : p);
+                    return b == null ? null : new java.io.ByteArrayInputStream(b);
+                }
+                @Override public int getContentLength() {
+                    String p = u.getPath();
+                    byte[] b = entries.get(p.startsWith("/") ? p.substring(1) : p);
+                    return b == null ? -1 : b.length;
+                }
+            };
+        }
+    };
 }
