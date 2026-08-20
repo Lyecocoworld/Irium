@@ -52,10 +52,26 @@ public final class ClientRelaunch {
         }
     }
 
-    /** Index du token classe principale (premier token non-option après java.exe). */
+    /** Options JVM suivies d'une valeur séparée (le token suivant n'est PAS la main class). */
+    private static final java.util.Set<String> OPTS_WITH_VALUE = java.util.Set.of(
+            "-cp", "-classpath", "--class-path", "-D", "-Xbootclasspath");
+
+    /** Index du token classe principale (après java.exe, en ignorant options+valeurs). */
     static int indexOfMain(List<String> toks) {
+        if (toks.isEmpty()) return 0;
+        // token 0 = java.exe ; -jar <jar> la cible suit directement
         for (int i = 1; i < toks.size(); i++) {
-            if (!toks.get(i).startsWith("-")) return i;
+            String t = toks.get(i);
+            if (t.equals("-jar")) return i + 1 < toks.size() ? i + 1 : toks.size();
+            if (t.startsWith("-")) {
+                // option avec valeur séparée -> sauter la valeur
+                String bare = t.contains("=") ? t.substring(0, t.indexOf('=')) : t;
+                if (OPTS_WITH_VALUE.contains(bare) && !t.contains("=")) {
+                    i++; // sauter la valeur
+                }
+                continue;
+            }
+            return i; // premier token non-option = classe principale
         }
         return toks.size();
     }
