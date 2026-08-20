@@ -81,6 +81,10 @@ public final class FabricModHost {
             }
 
             ModClassLoader loader = new ModClassLoader(entries);
+            // Racine M7-B4-5 : interfaces du mod injectées dans des classes MC -> le jar
+            // doit être visible du loader APP (identité de classe unique, cast possible)
+            java.nio.file.Path modJar = materializeJar(meta.id, entries);
+            MixinGateway.appendModToSystemClassPath(modJar);
             Mod mod = new Mod(meta.id, meta, loader);
             MODS.put(meta.id, mod);
 
@@ -299,5 +303,23 @@ public final class FabricModHost {
         int n = 0;
         for (String k : entries.keySet()) if (k.endsWith(".class")) n++;
         return n;
+    }
+
+    /** Écrit le jar du mod sur disque (cache par contenu) pour l'exposition au loader APP. */
+    private static java.nio.file.Path materializeJar(String id, Map<String, byte[]> entries) throws java.io.IOException {
+        java.nio.file.Path dir = java.nio.file.Path.of(
+                System.getProperty("java.io.tmpdir"), "irium-mods");
+        java.nio.file.Files.createDirectories(dir);
+        java.nio.file.Path jar = dir.resolve(id + ".jar");
+        if (java.nio.file.Files.exists(jar)) return jar; // cache hit (id+contenu stables par session)
+        try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(
+                java.nio.file.Files.newOutputStream(jar))) {
+            for (Map.Entry<String, byte[]> e : entries.entrySet()) {
+                zos.putNextEntry(new java.util.zip.ZipEntry(e.getKey()));
+                zos.write(e.getValue());
+                zos.closeEntry();
+            }
+        }
+        return jar;
     }
 }

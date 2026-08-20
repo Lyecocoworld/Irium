@@ -66,6 +66,23 @@ public final class MixinGateway {
         synchronized (modLoaders) { modLoaders.add(modLoader); }
     }
 
+    /**
+     * Racine M7-B4-5 : les mixins injectent des INTERFACES DU MOD dans des classes MC
+     * (PackRepository doit implémenter IPackRepository du mod). La classe MC vit dans
+     * le loader APP, l'interface dans le ModClassLoader -> NoClassDefFoundError au cast.
+     * Solution standard des agents : écrire le jar du mod sur disque et l'ajouter au
+     * classpath du loader APP via appendToSystemClassLoaderSearch -> l'interface est
+     * définie UNE fois, parent-first, visible des deux côtés.
+     */
+    public static void appendModToSystemClassPath(java.nio.file.Path modJar) {
+        try {
+            instrumentation.appendToSystemClassLoaderSearch(new java.util.jar.JarFile(modJar.toFile()));
+            log("jar mod ajouté au classpath du loader APP: " + modJar.getFileName());
+        } catch (Throwable t) {
+            log("échec appendToSystemClassLoaderSearch: " + t);
+        }
+    }
+
     public static synchronized void addConfig(String configResource) {
         try {
             Mixins.addConfiguration(configResource);
@@ -99,8 +116,9 @@ public final class MixinGateway {
         if (t == null || bytes == null) return null;
         String dotted = name.replace('/', '.');
         try {
-            return t.transformClassBytes(name, dotted, bytes);
-            // un mixin cassé ne doit jamais tuer le chargement de la classe
+            byte[] out = t.transformClassBytes(name, dotted, bytes);
+            if (out == null) return null;
+            return out;
         } catch (Throwable err) {
             log("mixin transform échec " + name + ": " + err);
             return null;
