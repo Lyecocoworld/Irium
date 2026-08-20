@@ -83,8 +83,9 @@ public final class MixinGateway {
     static byte[] transform(String name, byte[] bytes) {
         IMixinTransformer t = lazyTransformer();
         if (t == null || bytes == null) return null;
+        String dotted = name.replace('/', '.');
         try {
-            return t.transformClassBytes(name, name, bytes);
+            return t.transformClassBytes(name, dotted, bytes);
             // un mixin cassé ne doit jamais tuer le chargement de la classe
         } catch (Throwable err) {
             log("mixin transform échec " + name + ": " + err);

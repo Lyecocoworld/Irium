@@ -92,13 +92,21 @@ public final class FabricModHost {
             // runtime Mixin prêt à le voir (mixins.json + classes)
             MixinGateway.registerMod(loader);
 
-            // configs mixin (+ retransform à chaud : le client est déjà booté)
-            if (meta.mixins != null) {
+            // configs mixin + retransform à chaud des cibles extraites du bytecode
+            if (meta.mixins != null && !meta.mixins.isEmpty()) {
                 for (String cfg : meta.mixins) MixinGateway.addConfig(cfg);
-                MixinGateway.retransform("net.minecraft.client.Minecraft",
-                        "net.minecraft.network.Connection",
-                        "net.minecraft.client.Keyboard", "net.minecraft.client.Mouse",
-                        "net.minecraft.server.packs.repository.PackRepository");
+                java.util.LinkedHashSet<String> targets = new java.util.LinkedHashSet<>();
+                for (String cls : entries.keySet()) {
+                    if (!cls.endsWith(".class")) continue;
+                    byte[] b = entries.get(cls);
+                    for (String t : dev.irium.agent.mixin.MixinTargetScanner.scan(b)) {
+                        targets.add(t);
+                    }
+                }
+                if (!targets.isEmpty()) {
+                    MixinGateway.retransform(targets.toArray(new String[0]));
+                    IriumAgent.log("[fabric-mod] " + targets.size() + " cibles mixin retransformées: " + targets);
+                }
             }
 
             IriumAgent.log("[fabric-mod] '" + meta.id + "' v" + meta.version + " installé ("
