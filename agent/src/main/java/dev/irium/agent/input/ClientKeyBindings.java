@@ -17,7 +17,7 @@ public final class ClientKeyBindings {
 
     private ClientKeyBindings() {}
 
-    public static synchronized void add(KeyMapping mapping) {
+    public static synchronized void register(KeyMapping mapping) {
         if (mapping == null || MOD_KEYS.contains(mapping)) return;
         MOD_KEYS.add(mapping);
         inject();
