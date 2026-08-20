@@ -41,6 +41,10 @@ public final class IriumAgent {
         try {
             HostDetection.Result host = HostDetection.detect();
             log("[" + mode + "] irium-agent 0.3.0 bootstrapping" + (force ? " (force)" : ""));
+            // M7-B8 : warmup AVANT TOUT — les classes partagées agent/client (Gson,
+            // Formatter) doivent être définies par NOUS en premier, sinon course
+            // avec la thread Render (ClassCircularityError, 2 crashes réels).
+            ClassWarmup.warm();
             log("[" + mode + "] host detection: " + host);
 
             if (!host.minecraft() && !force) {
