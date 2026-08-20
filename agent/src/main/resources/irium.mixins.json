@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "dev.irium.agent.mixin.mc",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "PackRepositoryMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

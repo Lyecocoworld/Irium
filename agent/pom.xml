@@ -5,7 +5,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>dev.irium</groupId>
   <artifactId>irium-agent</artifactId>
-  <version>0.5.0</version>
+  <version>0.6.0</version>
   <packaging>jar</packaging>
   <name>Irium Agent</name>
 
@@ -43,6 +43,15 @@
       <groupId>com.google.code.gson</groupId>
       <artifactId>gson</artifactId>
       <version>2.11.0</version>
+    </dependency>
+    <!-- M7-B9 : MixinExtras — sur vraie Fabric le LOADER le fournit (0.15+) ; nous
+         on EST le loader -> bundlé dans l'agent (non relocalisé : les mixins des mods
+         référencent com/llamalad7/... en dur). Seul -common est requis (le mod
+         platform-fabric ne fait qu'appeler Bootstrap.init, on le fait nous-mêmes). -->
+    <dependency>
+      <groupId>io.github.llamalad7</groupId>
+      <artifactId>mixinextras-common</artifactId>
+      <version>0.5.4</version>
     </dependency>
     <!-- Client MC 26.2 (SKL, Mojang-mappé) : system-scope, compile-only, JAMAIS shadé -->
     <dependency>
@@ -125,7 +134,7 @@
               <Agent-Class>dev.irium.agent.IriumAgent</Agent-Class>
               <Can-Redefine-Classes>true</Can-Redefine-Classes>
               <Can-Retransform-Classes>true</Can-Retransform-Classes>
-              <Irium-Version>0.4.0</Irium-Version>
+              <Irium-Version>0.6.0</Irium-Version>
             </manifestEntries>
           </archive>
         </configuration>

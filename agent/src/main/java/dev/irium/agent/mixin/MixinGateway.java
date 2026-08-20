@@ -37,7 +37,11 @@ public final class MixinGateway {
         started = true;
         instrumentation = inst;
         try {
+            // M7-B9 : config mixin de l'AGENT (injecte la pack source Irium dans
+            // PackRepository dès le boot). APRÈS MixinBootstrap.init() — avant,
+            // l'environnement n'existe pas encore ("Environment conflict").
             MixinBootstrap.init();
+            Mixins.addConfiguration("irium.mixins.json");
             // Racine M7-B4 : à l'attach à chaud, PERSONNE n'a instancié le MixinTransformer
             // (c'est normalement le rôle du launcher hôte). getActiveTransformer() = null
             // pour toujours -> transform() no-op silencieux -> retransform sans effet.
@@ -55,6 +59,15 @@ public final class MixinGateway {
                 // Le constructeur s'est auto-enregistré comme transformer actif de l'env DEFAULT
             }
             if (t instanceof IMixinTransformer imt) transformer = imt;
+            // M7-B9 : MixinExtras — sur vraie Fabric le loader le fournit ; nous
+            // on EST le loader. init() enregistre les injecteurs (@WrapOperation,
+            // @ModifyExpressionValue...) AVANT que les mods ne préparent leurs mixins.
+            try {
+                com.llamalad7.mixinextras.MixinExtrasBootstrap.init();
+                log("MixinExtras prêt");
+            } catch (Throwable mex) {
+                log("MixinExtras échec: " + mex);
+            }
             inst.addTransformer(new IriumMixinTransformer(), true);
             log("Mixin runtime prêt (transformer=" + (transformer != null) + ")");
         } catch (Throwable t) {

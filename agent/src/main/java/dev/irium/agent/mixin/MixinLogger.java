@@ -4,7 +4,7 @@ import org.spongepowered.asm.logging.ILogger;
 import org.spongepowered.asm.logging.Level;
 
 /** Logger Mixin → stdout préfixé [irium:mixin]. */
-final class MixinLogger implements ILogger {
+public final class MixinLogger implements ILogger {
 
     private final String id;
 

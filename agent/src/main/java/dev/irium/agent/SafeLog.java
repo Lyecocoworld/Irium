@@ -58,4 +58,10 @@ public final class SafeLog {
         if (!started) return;
         PENDING.offer("[irium] " + tag + " " + a + " " + b);
     }
+
+    /** M7-B9 : queue directe (non-callback) — utilisé par les packs mixins. */
+    public static void offer(String line) {
+        if (!started) return;
+        PENDING.offer("[irium] " + line);
+    }
 }

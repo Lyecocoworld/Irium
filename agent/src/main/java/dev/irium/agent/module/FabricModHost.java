@@ -46,6 +46,8 @@ public final class FabricModHost {
         final String id;
         final ModJarMeta meta;
         final ModClassLoader loader;
+        /** jar matérialisé sur disque (classpath APP) — M7-B9 pour getRootPaths. */
+        volatile java.nio.file.Path jarPath;
         Mod(String id, ModJarMeta meta, ModClassLoader loader) { this.id = id; this.meta = meta; this.loader = loader; }
     }
 
@@ -288,6 +290,10 @@ public final class FabricModHost {
         Mod mod = new Mod(meta.id, meta, loader);
         MODS.put(meta.id, mod);
 
+        // M7-B9 : assets (lang/textures) servis comme resource pack built-in
+        IriumPackSource.register(meta.id, entries);
+        mod.jarPath = modJar;
+
         // classes du mod enregistrees pour le dispatch
         for (String n : entries.keySet()) {
             if (n.endsWith(".class")) BY_CLASS.put(n.replace('/', '.').replace(".class", ""), mod);
@@ -331,6 +337,10 @@ public final class FabricModHost {
         if (dev.irium.agent.IriumTap.currentChannel() != null) {
             dev.irium.agent.IriumTap.fireJoinLate();
         }
+
+        // M7-B9 : install à chaud -> les resource packs doivent recharger pour
+        // voir les assets du mod (lang, textures). Sur le render thread.
+        dev.irium.agent.module.ResourcePackReloader.schedule();
     }
 
     private interface Init<T> { void run(T t); }
@@ -400,7 +410,10 @@ public final class FabricModHost {
         if (m == null) return Optional.empty();
         return Optional.of(new net.fabricmc.loader.api.ModContainer() {
             @Override public net.fabricmc.loader.api.metadata.ModMetadata getMetadata() { return metaOf(m); }
-            @Override public List<Path> getRootPaths() { return List.of(Path.of(".")); }
+            @Override public List<Path> getRootPaths() {
+                java.nio.file.Path jp = m.jarPath;
+                return jp != null ? List.of(jp) : List.of(Path.of("."));
+            }
             @Override public net.fabricmc.loader.api.metadata.ModOrigin getOrigin() { return ModOriginIRIUM.INSTANCE; }
         });
     }
@@ -466,6 +479,7 @@ public final class FabricModHost {
         BY_CLASS.clear();
         net.fabricmc.fabric.impl.client.networking.ClientNetworkingImpl.clear();
         dev.irium.agent.hud.FabricHudBridge.clearAll();
+        IriumPackSource.clear();
         IriumAgent.log("[fabric-mod] sandbox vidée (" + n + " mod(s))");
     }
 
