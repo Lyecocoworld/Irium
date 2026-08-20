@@ -46,32 +46,45 @@ public final class ModuleManager {
     /** M7-B6 : relance en attente (host cible) si le set serveur != boot armé. */
     private volatile String pendingRelaunch;
     private volatile boolean relaunchStarted;
+    /** M7-B7 : accélère la relance en attente (cache complet avant le délai). */
+    private volatile boolean relaunchHurry;
 
     private ModuleManager(Channel channel) { this.channel = channel; }
 
-    /** M7-B6 : déclenche la relance auto (idempotent, anti-boucle). */
+    /**
+     * M7-B7 : relance auto — UNE seule thread d'attente. Boucle jusqu'à ce que
+     * le cache du serveur soit complet (sha du MODSET == sha des jars reçus),
+     * accélérable via scheduleRelaunch(_, 0) -> relaunchHurry. Fallback 120 s.
+     */
     private void scheduleRelaunch(String host, int delayMs) {
-        if (relaunchStarted) return;
+        if (relaunchStarted) {
+            if (delayMs == 0) {
+                relaunchHurry = true;
+                IriumAgentLike.log("[module] cache complet -> relance immédiate");
+            }
+            return;
+        }
         relaunchStarted = true;
         Thread t = new Thread(() -> {
-            try { Thread.sleep(delayMs); } catch (InterruptedException ignored) {}
+            long waited = 0;
+            boolean complete = false;
+            long budget = Math.max(delayMs, 120000);
+            while (waited < budget) {
+                if (relaunchHurry || dev.irium.agent.module.FabricModHost.cacheCompleteFor(host)) {
+                    complete = true;
+                    break;
+                }
+                try { Thread.sleep(250); } catch (InterruptedException e) { return; }
+                waited += 250;
+            }
             if (!dev.irium.agent.module.ClientRelaunch.mayRelaunch()) {
                 IriumAgentLike.log("[module] relance annulée (déjà relancé ce boot ou norelaunch)");
                 return;
             }
-            // tous les jars sont-ils déjà en cache ? sinon attendre leur arrivée
-            int waited = delayMs;
-            while (IriumAgentLike.currentHost() != null && waited < 120000) {
-                if (dev.irium.agent.module.FabricModHost.cacheCompleteFor(host)) {
-                    IriumAgentLike.log("[module] cache complet -> relance immédiate");
-                    break;
-                }
-                try { Thread.sleep(500); } catch (InterruptedException ignored) {}
-                waited += 500;
-            }
-            IriumAgentLike.log("[module] RELANCE AUTO -> " + host + " (set armé à jour au prochain boot)");
+            IriumAgentLike.log("[module] RELANCE AUTO -> " + host
+                    + (complete ? " (cache complet)" : " (délai écoulé, fallback)"));
             dev.irium.agent.module.ClientRelaunch.relaunch(host);
-        }, "irium-complete");
+        }, "irium-relaunch");
         t.setDaemon(true);
         t.start();
     }

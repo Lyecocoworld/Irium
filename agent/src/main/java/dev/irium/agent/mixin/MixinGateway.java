@@ -153,5 +153,5 @@ public final class MixinGateway {
         }
     }
 
-    static void log(String m) { System.out.println("[irium:mixin] " + m); }
+    static void log(String m) { dev.irium.agent.SafeLog.v("[irium:mixin]", m); }
 }

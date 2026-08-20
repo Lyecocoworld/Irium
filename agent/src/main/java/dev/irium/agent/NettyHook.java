@@ -38,10 +38,10 @@ public final class NettyHook implements ClassFileTransformer {
             ClassReader cr = new ClassReader(classfileBuffer);
             ClassWriter cw = new ClassWriter(cr, 0);
             cr.accept(new Visitor(Opcodes.ASM9, cw), 0);
-            IriumAgent.log("[netty-hook] DefaultChannelPipeline instrumenté (loader " + safeLoader(loader) + ")");
+            dev.irium.agent.SafeLog.v("[netty-hook]", "DefaultChannelPipeline instrumenté (loader " + safeLoader(loader) + ")");
             return cw.toByteArray();
         } catch (Throwable t) {
-            IriumAgent.log("[netty-hook] échec transformation, host intact : " + t);
+            dev.irium.agent.SafeLog.v("[netty-hook]", "échec transformation, host intact : " + t);
             return null; // ne JAMAIS casser le host
         }
     }

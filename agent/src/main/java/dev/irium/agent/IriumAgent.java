@@ -50,6 +50,8 @@ public final class IriumAgent {
             }
 
             log("[" + mode + "] Minecraft detected -> registering netty hook (M3) + observation transformer");
+            SafeLog.start(); // M7-B7 : logger safe-callback AVANT tout addTransformer
+            ObservationTransformer.startDrain(); // file d'observation (opt-in -Dirium.observe=1)
             INSTR = inst;
             inst.addTransformer(new NettyHook(), true);          // retransformable : marche en attach à chaud
             inst.addTransformer(new dev.irium.agent.module.RecipeTransformer(), true); // M5 : retransformation autorisée

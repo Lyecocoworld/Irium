@@ -52,11 +52,11 @@ public final class RecipeTransformer implements ClassFileTransformer {
             cr.accept(new Visitor(Opcodes.ASM9, cw, r), 0);
             byte[] patched = cw.toByteArray();
             RecipeStore.markApplied(className);
-            IriumAgent.log("[recette] ancre vérifiée -> hook injecté dans " + className
+            dev.irium.agent.SafeLog.v("[recette]", "ancre vérifiée -> hook injecté dans " + className
                     + "." + r.method() + " (bridge " + r.bridge() + ")");
             return patched;
         } catch (Throwable t) {
-            IriumAgent.log("[recette] échec transformation, host intact : " + t);
+            dev.irium.agent.SafeLog.v("[recette]", "échec transformation, host intact : " + t);
             return null; // ne JAMAIS casser le host
         }
     }
