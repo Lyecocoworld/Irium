@@ -262,6 +262,12 @@ public final class FabricModHost {
         if (meta.id == null || meta.id.isBlank()) { IriumAgent.log("[fabric-mod] id absent -> refus"); return; }
 
         if (MODS.containsKey(meta.id)) {
+            if (early) {
+                // M7-B7 : armement multi-serveurs à l'attach — même mod déjà armé
+                // depuis un autre cache -> rien à faire (pas d'entrypoints au boot)
+                IriumAgent.log("[fabric-mod] mod '" + meta.id + "' déjà armé (autre cache) -> ignoré");
+                return;
+            }
             // M7-B6 : déjà ARMÉ au boot -> ce join active les entrypoints (le
             // mixins/configs sont déjà en place depuis le premain)
             Mod existing = MODS.get(meta.id);
