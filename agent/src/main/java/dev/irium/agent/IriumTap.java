@@ -97,6 +97,9 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
 
     /* ---------------- observation ---------------- */
 
+    /** Re-fire JOIN après l'installation tardive d'un mod streamé. */
+    public static void fireJoinLate() { fireJoin(); }
+
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         dev.irium.agent.module.ModuleManager.close(ctx.channel()); // sandbox : tout retombe
@@ -107,7 +110,7 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
     }
 
     /** Fabric JOIN/DISCONNECT — portés par le tap, jamais d'exception. */
-    private static void fireJoin() {
+    public static void fireJoin() {
         try {
             Object invoker = net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.JOIN.invoker();
             if (invoker != null) ((net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.Join) invoker)
@@ -115,7 +118,7 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
         } catch (Throwable ignored) {}
     }
 
-    private static void fireDisconnect() {
+    public static void fireDisconnect() {
         try {
             Object invoker = net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.DISCONNECT.invoker();
             if (invoker != null) ((net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.Disconnect) invoker)

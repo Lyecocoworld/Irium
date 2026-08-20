@@ -108,6 +108,11 @@ public final class FabricModHost {
             runEntrypoint(mod, "main", net.fabricmc.api.ModInitializer.class, mi -> mi.onInitialize());
             runEntrypoint(mod, "client", net.fabricmc.api.ClientModInitializer.class, ci -> ci.onInitializeClient());
 
+            // le mod arrive APRÈS le PLAY : re-fire JOIN pour ses receivers
+            if (dev.irium.agent.IriumTap.currentChannel() != null) {
+                dev.irium.agent.IriumTap.fireJoinLate();
+            }
+
         } catch (Throwable t) {
             IriumAgent.log("[fabric-mod] échec installation: " + t);
         }
