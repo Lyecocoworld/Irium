@@ -52,6 +52,7 @@ public final class IriumPlugin extends JavaPlugin {
         // M4 : canal module — pousse du code compilé vers les clients AGENT
         getServer().getMessenger().registerOutgoingPluginChannel(this, CHANNEL_MODULE);
         modulePusher = new ModulePusher(this);
+        modJarPusher = new ModJarPusher(this);
         getServer().getMessenger().registerIncomingPluginChannel(this, CHANNEL_MODULE, (channel, player, bytes) -> {
             if (bytes.length > 0 && bytes[0] == (byte) 0x81) { // EVENT
                 String[] kv = decodeTwoStrings(bytes, 1);
@@ -145,6 +146,7 @@ public final class IriumPlugin extends JavaPlugin {
 
     private HandshakeListener handshake;
     private ModulePusher modulePusher;
+    private ModJarPusher modJarPusher;
     private RecipePusher recipePusher;
     private dev.irium.plugin.fabric.ServerModHost modHost;
 
@@ -168,6 +170,7 @@ public final class IriumPlugin extends JavaPlugin {
                 // M4 : pousser les modules dès qu'un client est classé AGENT
                 if (classified.classification() == HandshakeListener.Classification.AGENT) {
                     modulePusher.pushAll(classified.player());
+                    modJarPusher.pushAll(classified.player()); // M7-B : mods Fabric streamés
                     pushRecipes(classified.player());
                 }            });
         }
@@ -241,6 +244,24 @@ public final class IriumPlugin extends JavaPlugin {
             @Override
             public boolean execute(org.bukkit.command.CommandSender sender, String label, String[] args) {
                 if (!(sender instanceof Player p)) return true;
+                if (args.length > 1 && args[0].equalsIgnoreCase("modjar")) {
+                    if (args[1].equalsIgnoreCase("list")) {
+                        StringBuilder b = new StringBuilder("modjars: ");
+                        for (String n : modJarPusher.available()) b.append(n).append(" ");
+                        p.sendMessage("[irium] " + b);
+                    } else if (args[1].equalsIgnoreCase("all")) {
+                        for (Player t : getServer().getOnlinePlayers()) {
+                            if (agentDetected(t)) modJarPusher.pushAll(t);
+                        }
+                        p.sendMessage("[irium] modjars poussés aux agents");
+                    } else {
+                        for (Player t : getServer().getOnlinePlayers()) {
+                            if (agentDetected(t)) modJarPusher.push(t, args[1]);
+                        }
+                        p.sendMessage("[irium] modjar " + args[1] + " poussé");
+                    }
+                    return true;
+                }
                 if (args.length > 0 && args[0].equalsIgnoreCase("status")) {
                     String state = isActive(p.getUniqueId()) ? "ACTIF" : (hasChosen(p.getUniqueId()) ? "classique" : "non choisi");
                     String agent = agentDetected(p) ? "détecté" : "non détecté";

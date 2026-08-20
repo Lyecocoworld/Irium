@@ -5,7 +5,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>dev.irium</groupId>
   <artifactId>irium-agent</artifactId>
-  <version>0.4.2</version>
+  <version>0.5.0</version>
   <packaging>jar</packaging>
   <name>Irium Agent</name>
 
@@ -15,6 +15,37 @@
       <groupId>org.ow2.asm</groupId>
       <artifactId>asm</artifactId>
       <version>9.9.1</version>
+    </dependency>
+    <dependency>
+      <groupId>org.ow2.asm</groupId>
+      <artifactId>asm-tree</artifactId>
+      <version>9.9.1</version>
+    </dependency>
+    <dependency>
+      <groupId>org.ow2.asm</groupId>
+      <artifactId>asm-commons</artifactId>
+      <version>9.9.1</version>
+    </dependency>
+    <!-- Mixin officiel Fabric (service custom Irium via ServiceLoader) -->
+    <dependency>
+      <groupId>net.fabricmc</groupId>
+      <artifactId>sponge-mixin</artifactId>
+      <version>0.16.2-mixin.0.8.7</version>
+    </dependency>
+    <!-- Gson : shadé dans l'agent pour parser fabric.mod.json côté client (fourni par le
+         classpath du jeu, mais on ne dépend pas de sa présence au compile) -->
+    <dependency>
+      <groupId>com.google.code.gson</groupId>
+      <artifactId>gson</artifactId>
+      <version>2.11.0</version>
+    </dependency>
+    <!-- Client MC 26.2 (SKL, Mojang-mappé) : system-scope, compile-only, JAMAIS shadé -->
+    <dependency>
+      <groupId>net.minecraft</groupId>
+      <artifactId>client-26.2</artifactId>
+      <version>26.2</version>
+      <scope>system</scope>
+      <systemPath>C:/Users/space/AppData/Roaming/.sklauncher/versions/26.2/26.2.jar</systemPath>
     </dependency>
     <!-- Netty : compile-only, fourni par le host à l'exécution (jamais shadé) -->
     <dependency>
@@ -49,7 +80,26 @@
                   <pattern>org.objectweb.asm</pattern>
                   <shadedPattern>dev.irium.shaded.asm</shadedPattern>
                 </relocation>
+                <!-- Mixin relocalisé : refs internes org/objectweb/asm réécrites vers shaded,
+                     collisions impossibles avec libs launcher (asm 9.2-9.9 présentes) -->
+                <relocation>
+                  <pattern>org.spongepowered</pattern>
+                  <shadedPattern>dev.irium.shaded.mixin</shadedPattern>
+                </relocation>
               </relocations>
+              <filters>
+                <!-- services originaux exclus : on déclare NOTRE service Irium (interfaces relocalisées) -->
+                <filter>
+                  <artifact>net.fabricmc:sponge-mixin</artifact>
+                  <excludes>
+                    <exclude>META-INF/services/**</exclude>
+                    <exclude>org/spongepowered/tools/**</exclude>
+                  </excludes>
+                </filter>
+              </filters>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+              </transformers>
             </configuration>
           </execution>
         </executions>

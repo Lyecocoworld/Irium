@@ -31,7 +31,7 @@ public final class ModuleManager {
     public static final String CHANNEL = "irium:module";
     static final AttributeKey<ModuleManager> KEY = AttributeKey.valueOf("irium.modules");
 
-    private static final int MAX_MODULE_BYTES = 1 << 20; // 1 Mo
+    private static final int MAX_MODULE_BYTES = 32 << 20; // 32 Mo (M7-B : mods complets, SVC 5.6 Mo)
 
     /** Réception en cours. */
     private static final class Rx {
@@ -89,6 +89,23 @@ public final class ModuleManager {
                 }
             }
             case 0x03 -> activate();
+            case 0x05 -> { // MODJAR (M7-B) : jar Fabric complet
+                Rx r = rx; rx = null;
+                if (r == null) { IriumAgentLike.log("[module] MODJAR sans transfert -> ignoré"); return; }
+                byte[] bytes = r.out.toByteArray();
+                if (bytes.length != r.totalLen) {
+                    IriumAgentLike.log("[module] MODJAR longueur " + bytes.length + " != " + r.totalLen + " -> refus");
+                    return;
+                }
+                byte[] actual = sha256(bytes);
+                if (!MessageDigest.isEqual(actual, r.sha256)) {
+                    IriumAgentLike.log("[module] MODJAR sha256 MISMATCH -> refus (module '" + r.manifestId + "')");
+                    return;
+                }
+                IriumAgentLike.log("[module] MODJAR '" + r.manifestId + "' reçu (" + bytes.length + " octets, sha256 ok) -> installation");
+                // installation sur le thread de rendu si dispo, sinon direct
+                dev.irium.agent.module.FabricModHost.install(bytes);
+            }
             case 0x04 -> { // RECIPE (M5)
                 String target = readStr(body);
                 String method = readStr(body);
@@ -178,6 +195,7 @@ public final class ModuleManager {
         m.modules.clear();
         RecipeStore.clearAll();            // M5 : plus aucune recette active
         dev.irium.agent.hud.HudBridge.clearAll(); // plus aucun renderer
+        dev.irium.agent.module.FabricModHost.uninstallAll(); // M7-B : sandbox mods Fabric
         IriumAgentLike.log("[module] session fermée : " + n + " module(s) désactivé(s), classloader abandonné");
     }
 

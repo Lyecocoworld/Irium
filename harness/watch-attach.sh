@@ -1,7 +1,7 @@
 #!/bin/bash
 # Watcher persistant : attend TOUT nouveau process javaw chargant 26.2.jar
 # et y attache l'agent Irium. Boucle à l'infini — un attach par nouveau process.
-JAR="C:/Users/space/Code/Irium/agent/target/irium-agent-0.4.2.jar"
+JAR="C:/Users/space/Code/Irium/agent/target/irium-agent-0.5.0.jar"
 ATTACH_CP="C:/Users/space/Code/Irium/harness/.lab"
 JAVA="/c/Program Files/Eclipse Adoptium/jdk-25.0.3.9-hotspot/bin/java"
 LAST=""

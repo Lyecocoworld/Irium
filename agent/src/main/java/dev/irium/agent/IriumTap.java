@@ -2,6 +2,7 @@ package dev.irium.agent;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelPipeline;
@@ -40,12 +41,16 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
     private State state = State.LOGIN;
     private boolean registered = false;
     private final AtomicReference<ChannelHandlerContext> ctxRef = new AtomicReference<>();
+    private static final AtomicReference<Channel> CURRENT = new AtomicReference<>();
 
     IriumTap() {}
     private IriumTap(State state, boolean registered) {
         this.state = state;
         this.registered = registered;
     }
+
+    /** Canal de la session courante (émission de payloads mods). */
+    public static Channel currentChannel() { return CURRENT.get(); }
 
     /* ---------------- installation ---------------- */
 
@@ -95,7 +100,27 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         dev.irium.agent.module.ModuleManager.close(ctx.channel()); // sandbox : tout retombe
+        if (CURRENT.compareAndSet(ctx.channel(), null)) {
+            fireDisconnect();
+        }
         super.channelInactive(ctx);
+    }
+
+    /** Fabric JOIN/DISCONNECT — portés par le tap, jamais d'exception. */
+    private static void fireJoin() {
+        try {
+            Object invoker = net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.JOIN.invoker();
+            if (invoker != null) ((net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.Join) invoker)
+                    .onPlayReady(null, null, net.minecraft.client.Minecraft.getInstance());
+        } catch (Throwable ignored) {}
+    }
+
+    private static void fireDisconnect() {
+        try {
+            Object invoker = net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.DISCONNECT.invoker();
+            if (invoker != null) ((net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.Disconnect) invoker)
+                    .onPlayDisconnect(null, null, net.minecraft.client.Minecraft.getInstance());
+        } catch (Throwable ignored) {}
     }
 
     @Override
@@ -160,6 +185,8 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
 
     private void onPlay(ChannelHandlerContext ctx) {
         IriumAgent.log("[tap] PLAY atteint sur " + ctx.channel());
+        CURRENT.set(ctx.channel());
+        fireJoin();
         if (registered) return;
         registered = true;
         // minecraft:register : custom_payload serverbound PLAY = 0x16, corps = canaux \0-séparés
@@ -177,6 +204,18 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
         if (MODULE_CHANNEL.equals(chan)) {
             dev.irium.agent.module.ModuleManager.of(ctx.channel()).ingest(d);
             return;
+        }
+        // M7-B : dispatch des custom_payload vers les mods Fabric streamés
+        try {
+            net.minecraft.resources.Identifier id = net.minecraft.resources.Identifier.parse(chan);
+            if (!chan.startsWith("irium:") && !chan.equals("minecraft:register")
+                    && !chan.equals("minecraft:unregister")) {
+                byte[] body = new byte[d.readableBytes()];
+                d.readBytes(body);
+                net.fabricmc.fabric.impl.client.networking.ClientNetworkingImpl.dispatch(id, body);
+            }
+        } catch (Throwable ignored) {
+            // canal non Identifier ou pas de handler : on ignore, le host voit tout
         }
         if (!CHANNEL.equals(chan)) return;
         int bodyLen = d.readableBytes();

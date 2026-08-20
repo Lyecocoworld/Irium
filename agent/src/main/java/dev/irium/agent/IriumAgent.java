@@ -52,6 +52,8 @@ public final class IriumAgent {
             inst.addTransformer(new NettyHook(), true);          // retransformable : marche en attach à chaud
             inst.addTransformer(new dev.irium.agent.module.RecipeTransformer(), true); // M5 : retransformation autorisée
             inst.addTransformer(new ObservationTransformer(), true);
+            // M7-B : runtime Mixin embarqué (mods Fabric streamés)
+            dev.irium.agent.mixin.MixinGateway.start(inst);
             if (hotAttach) {
                 // client déjà lancé : netty est déjà chargé, on le retransforme
                 // pour que les PROCHAINES connexions installent le tap.

@@ -228,20 +228,55 @@ public class IriumBot {
     static void startVoiceStreaming() {
         Thread t = new Thread(() -> {
             try {
-                // mic de test : OPUS silence factice
-                Thread.sleep(1000);
-                byte[] mic = buildMicPacket(new byte[0], false, System.currentTimeMillis());
+                Thread.sleep(500);
+                byte[] mic = buildMicPacket(OPUS_SILENCE, false, 1);
                 udp.send(new DatagramPacket(mic, mic.length, InetAddress.getByName(voiceHost), voicePort));
-                System.out.println("[bot:voice] MIC envoyé");
-                while (true) {
-                    Thread.sleep(Math.min(kaMs > 0 ? kaMs : 5000, 10000));
-                    byte[] ka = buildKeepAlivePacket();
-                    udp.send(new DatagramPacket(ka, ka.length, InetAddress.getByName(voiceHost), voicePort));
+                System.out.println("[bot:voice] MIC envoyé (" + OPUS_SILENCE.length + "B opus)");
+                // after MIC: log everything the voice server relays to us
+                long until = System.currentTimeMillis() + 25000;
+                while (System.currentTimeMillis() < until) {
+                    try {
+                        byte[] buf = new byte[4096];
+                        DatagramPacket p = new DatagramPacket(buf, buf.length);
+                        udp.receive(p);
+                        byte[] data = Arrays.copyOfRange(p.getData(), 0, p.getLength());
+                        System.out.println("[bot:relay] UDP reçus " + data.length + "B hex=" + hex(data, Math.min(64, data.length)));
+                        if (data.length > 1 && data[0] == (byte) 0xFF) {
+                            try {
+                                int q = 1 + 16 + varIntAt(data, 17)[0];
+                                int[] lr = varIntAt(data, q); int elen = lr[0];
+                                byte[] enc = Arrays.copyOfRange(data, lr[1], lr[1] + elen);
+                                byte[] plain = aesGcmDecrypt(secretBytes, enc);
+                                if (plain != null && plain.length > 0) {
+                                    int ptype = plain[0] & 0xFF;
+                                    String what = switch (ptype) {
+                                        case 2 -> "PlayerSound (voix relayée !)";
+                                        case 3 -> "GroupSound";
+                                        case 4 -> "LocationSound";
+                                        default -> "type " + ptype;
+                                    };
+                                    System.out.println("[bot:relay] *** DÉCODÉ: " + what + " (" + plain.length + "B) ***");
+                                }
+                            } catch (Exception ignore) {}
+                        }
+                    } catch (SocketTimeoutException ste) { /* keep listening */ }
                 }
+                System.out.println("[bot:relay] écoute UDP terminée (25s)");
             } catch (Exception e) { System.out.println("[bot:voice] stream ERR: " + e); }
         }, "svc-stream");
         t.setDaemon(true); t.start();
     }
+
+    static byte[] aesGcmDecrypt(byte[] key, byte[] ivAndCt) throws Exception {
+        byte[] iv = Arrays.copyOfRange(ivAndCt, 0, 12);
+        byte[] ct = Arrays.copyOfRange(ivAndCt, 12, ivAndCt.length);
+        javax.crypto.Cipher c = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+        c.init(javax.crypto.Cipher.DECRYPT_MODE, new javax.crypto.spec.SecretKeySpec(key, "AES"), new javax.crypto.spec.GCMParameterSpec(128, iv));
+        return c.doFinal(ct);
+    }
+
+    /** Trame OPUS "silence" 20ms 48kHz mono (DTX), encodée à la main — pas besoin de Concentus pour un relais. */
+    static final byte[] OPUS_SILENCE = { (byte)0xF8, (byte)0xFF, (byte)0xFE };
 
     // type 1 : data || whispering || sequenceNumber
     static byte[] buildMicPacket(byte[] data, boolean whispering, long seq) throws Exception {
