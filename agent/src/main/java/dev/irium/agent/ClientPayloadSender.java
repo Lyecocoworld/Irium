@@ -2,6 +2,7 @@ package dev.irium.agent;
 
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
+import net.minecraft.network.FriendlyByteBuf;
 
 import io.netty.buffer.Unpooled;
 
@@ -24,7 +25,20 @@ public final class ClientPayloadSender {
                 return;
             }
             io.netty.buffer.ByteBuf mc = Unpooled.buffer();
-            net.minecraft.network.FriendlyByteBuf buf = new net.minecraft.network.FriendlyByteBuf(mc);
+            // Les codecs custom_payload MC 26.2 attendent RegistryFriendlyByteBuf
+            // (cast explicite dans leurs encoders) -> ClassCastException sinon.
+            // On récupère le RegistryAccess de la connexion courante ; fallback
+            // FriendlyByteBuf nu si hors jeu (le codec le refuse proprement).
+            FriendlyByteBuf buf;
+            try {
+                var mci = net.minecraft.client.Minecraft.getInstance();
+                var conn = mci == null ? null : mci.getConnection();
+                buf = conn != null
+                        ? new net.minecraft.network.RegistryFriendlyByteBuf(mc, conn.registryAccess())
+                        : new FriendlyByteBuf(mc);
+            } catch (Throwable t) {
+                buf = new FriendlyByteBuf(mc);
+            }
             codec.encode(buf, payload);
             byte[] body = new byte[mc.readableBytes()];
             mc.readBytes(body);

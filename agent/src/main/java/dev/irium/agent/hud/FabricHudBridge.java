@@ -55,6 +55,30 @@ public final class FabricHudBridge {
         }
     }
 
+    private static java.lang.reflect.Method mGetInstance, mGetDelta;
+
+    /**
+     * M7-B10 : drain sans DeltaTracker explicite — la recette TAIL ne passe que
+     * l'extracteur (arg 1). Le DeltaTracker est résolu via Minecraft.getInstance()
+     * .getDeltaTracker() (réflexion, cache) ; si indisponible -> null (les éléments
+     * SVC tolèrent et nos per-element try/catch protègent le host de toute façon).
+     */
+    public static void drain(Object extractor) {
+        if (extractor == null || ELEMENTS.isEmpty()) return;
+        Object dt = null;
+        try {
+            if (mGetInstance == null) {
+                Class<?> mc = Class.forName("net.minecraft.client.Minecraft");
+                mGetInstance = mc.getMethod("getInstance");
+                mGetDelta = mc.getMethod("getDeltaTracker");
+            }
+            dt = mGetDelta.invoke(mGetInstance.invoke(null));
+        } catch (Throwable ignored) {
+            // pas de DeltaTracker -> null
+        }
+        tick(extractor, dt);
+    }
+
     public static void clearAll() {
         int n = ELEMENTS.size();
         ELEMENTS.clear();

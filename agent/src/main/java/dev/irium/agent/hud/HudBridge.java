@@ -41,6 +41,13 @@ public final class HudBridge {
     /** Appelé par le code injecté quand la méthode cible expose un contexte. */
     public static void tick(Object graphics) {
         lastExtractor = graphics;
+        // M7-B10 : drainer aussi les éléments Fabric (HudElementRegistry) —
+        // SVC s'y enregistre, la recette ne pointe que CE pont.
+        try {
+            dev.irium.agent.hud.FabricHudBridge.drain(graphics);
+        } catch (Throwable ignored) {
+            // jamais casser la méthode hôte
+        }
         tick();
     }
 

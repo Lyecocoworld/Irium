@@ -99,7 +99,11 @@ public final class IriumPackSource implements RepositorySource {
                     PackCompatibility.COMPATIBLE,
                     FeatureFlagSet.of(),
                     List.of());
-            PackSelectionConfig sel = new PackSelectionConfig(false, Pack.Position.TOP, false);
+            // required=true : rebuildSelected() n'ajoute AUTO que les packs
+            // isRequired() (même mécanisme que les packs mod Fabric). Sinon le
+            // pack est "available" mais jamais sélectionné -> ResourceManager
+            // "vanilla" seul -> placeholders lang + textures manquantes.
+            PackSelectionConfig sel = new PackSelectionConfig(true, Pack.Position.TOP, false);
             Pack.ResourcesSupplier sup = new Supplier(modId, entries);
             return new Pack(loc, sup, meta, sel);
         }
@@ -143,11 +147,23 @@ public final class IriumPackSource implements RepositorySource {
         public void listResources(PackType type, String namespace, String start,
                                   PackResources.ResourceOutput out) {
             if (type != PackType.CLIENT_RESOURCES) return;
-            String prefix = "assets/" + namespace + "/" + start;
+            // normaliser start (les appelants passent "textures", jamais "textures/")
+            String s = start.endsWith("/") ? start.substring(0, start.length() - 1) : start;
+            String prefix = "assets/" + namespace + "/" + s;
+            int plen = prefix.length();
             for (Map.Entry<String, byte[]> e : entries.entrySet()) {
-                if (!e.getKey().startsWith(prefix)) continue;
-                String rel = e.getKey().substring(prefix.length());
-                out.accept(Identifier.fromNamespaceAndPath(namespace, rel),
+                String k = e.getKey();
+                // doit être STRICTEMENT sous le dossier (pas le dossier lui-même,
+                // pas un fichier "texturesX") : le char après le prefix doit être '/'
+                if (!k.startsWith(prefix)) continue;
+                if (k.length() <= plen || k.charAt(plen) != '/') continue;
+                String rel = k.substring(plen + 1);
+                if (rel.isEmpty()) continue;
+                // CONTRAT FileToIdConverter : l'id émis CONTIENT le préfixe du dossier
+                // ("textures/gui/x.png", "lang/fr_fr.json") — fileToId re-stripe
+                // prefix+"/" et l'extension. Sans lui : StringIndexOutOfBounds ->
+                // "Caught error loading resourcepacks" -> tous les packs retirés.
+                out.accept(Identifier.fromNamespaceAndPath(namespace, s + "/" + rel),
                         () -> new ByteArrayInputStream(e.getValue()));
             }
         }
