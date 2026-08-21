@@ -100,6 +100,40 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
     /** Re-fire JOIN après l'installation tardive d'un mod streamé. */
     public static void fireJoinLate() { fireJoin(); }
 
+    /**
+     * M7-B11c : self-test Mod Menu — reproduit le crash user (clic bouton Mods :
+     * ModsScreen.init -> ModListWidget.filter -> updateSelectedEntry ->
+     * getContact()/getIcon()) sans interaction humaine. Activé par
+     * -Dirium.test.modsscreen=true (bot/harnais). Ouvre et referme l'écran.
+     */
+    public static void selfTestModsScreen() {
+        if (!Boolean.getBoolean("irium.test.modsscreen")) return;
+        Thread t = new Thread(() -> {
+            try {
+                Thread.sleep(6000); // laisser le HUD/minimap s'installer
+                net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+                mc.execute(() -> {
+                    try {
+                        Class<?> scr = Class.forName("com.terraformersmc.modmenu.gui.ModsScreen");
+                        java.lang.reflect.Constructor<?> ctor = scr.getConstructor(
+                                net.minecraft.client.gui.screens.Screen.class);
+                        mc.gui.setScreen((net.minecraft.client.gui.screens.Screen) ctor.newInstance(
+                                (net.minecraft.client.gui.screens.Screen) null));
+                        dev.irium.agent.IriumAgent.log(
+                                "[self-test] ModsScreen OUVERT — si getContact/getIcon cassent, FATAL ici");
+                        Thread.sleep(2500); // 3 ticks min pour init + render + filter
+                        mc.gui.setScreen(null);
+                        dev.irium.agent.IriumAgent.log("[self-test] ModsScreen refermé SANS crash");
+                    } catch (Throwable t2) {
+                        dev.irium.agent.IriumAgent.log("[self-test] ModsScreen échec: " + t2);
+                    }
+                });
+            } catch (Throwable ignored) {}
+        }, "irium-selftest");
+        t.setDaemon(true);
+        t.start();
+    }
+
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         dev.irium.agent.module.ModuleManager.close(ctx.channel()); // sandbox : tout retombe
@@ -111,6 +145,7 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
 
     /** Fabric JOIN/DISCONNECT — portés par le tap, jamais d'exception. */
     public static void fireJoin() {
+        selfTestModsScreen();
         try {
             Object invoker = net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.JOIN.invoker();
             if (invoker != null) ((net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.Join) invoker)

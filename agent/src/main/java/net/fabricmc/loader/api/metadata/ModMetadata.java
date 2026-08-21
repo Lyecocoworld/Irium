@@ -43,8 +43,16 @@ public interface ModMetadata {
 
     default Collection<Person> getContributors() { return List.of(); }
 
+    /**
+     * M7-B11c : Mod Menu appelle getContact() pour TOUT mod listé (lien
+     * "Source" de la description, DescriptionListWidget.rebuildUI). Une
+     * UnsupportedOperationException ici tue mouseClicked (FATAL Render thread).
+     * Retourner des contacts vides plutôt que jeter.
+     */
     default ContactInformation getContact() {
-        throw new UnsupportedOperationException();
+        return new ContactInformation() {
+            @Override public Optional<String> get(String key) { return Optional.empty(); }
+        };
     }
 
     default Collection<String> getLicense() { return List.of(); }

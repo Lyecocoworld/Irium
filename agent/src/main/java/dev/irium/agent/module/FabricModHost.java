@@ -378,7 +378,7 @@ public final class FabricModHost {
         // NPE dans CustomRenderTypes.applyFixedOrder (Stage 2/3).
         List<Mod> jijMods = new ArrayList<>();
         for (String k : entries.keySet()) {
-            if (!k.startsWith("irium-jij/fabric.mod.json")) continue;
+            if (!k.startsWith("irium-jij/") || !k.endsWith("/fabric.mod.json")) continue;
             try {
                 ModJarMeta jm = GSON.fromJson(
                         new String(entries.get(k), StandardCharsets.UTF_8), ModJarMeta.class);
@@ -386,6 +386,16 @@ public final class FabricModHost {
                 // le JiJ partage le classloader du parent (classes déjà fusionnées)
                 Mod sub = new Mod(jm.id, jm, loader);
                 sub.isJij = true;
+                // M7-B11c : entries propres au JiJ (icône, assets) — clés préfixées
+                // "irium-jij/<jar>/". Utile pour Mod Menu (icônes voicechat_api/xaerolib).
+                String pfx = k.substring(0, k.length() - "fabric.mod.json".length());
+                Map<String, byte[]> subEntries = new HashMap<>();
+                for (Map.Entry<String, byte[]> ee : entries.entrySet()) {
+                    if (ee.getKey().startsWith(pfx)) {
+                        subEntries.put(ee.getKey().substring(pfx.length()), ee.getValue());
+                    }
+                }
+                sub.entries = subEntries;
                 MODS.put(jm.id, sub);
                 jijMods.add(sub);
                 if (jm.mixins != null) {
@@ -744,7 +754,7 @@ public final class FabricModHost {
 
     private static Map<String, byte[]> unzip(byte[] jar) throws Exception {
         Map<String, byte[]> out = new HashMap<>();
-        List<byte[]> nested = new ArrayList<>();
+        Map<String, byte[]> nested = new java.util.LinkedHashMap<>();
         try (ZipInputStream zin = new ZipInputStream(new ByteArrayInputStream(jar))) {
             ZipEntry e;
             while ((e = zin.getNextEntry()) != null) {
@@ -758,27 +768,35 @@ public final class FabricModHost {
                 // partie de fabric-api, il doit être fusionné.)
                 if (e.getName().startsWith("META-INF/jars/") && e.getName().endsWith(".jar")) {
                     String base = e.getName().substring(e.getName().lastIndexOf('/') + 1);
-                    if (!base.startsWith("fabric-")) nested.add(b);
+                    if (!base.startsWith("fabric-")) nested.put(base, b);
                 }
             }
         }
-        for (byte[] n : nested) {
-            try (ZipInputStream zin = new ZipInputStream(new ByteArrayInputStream(n))) {
+        for (Map.Entry<String, byte[]> ne : nested.entrySet()) {
+            String base = ne.getKey();
+            try (ZipInputStream zin = new ZipInputStream(new ByteArrayInputStream(ne.getValue()))) {
                 ZipEntry e;
                 while ((e = zin.getNextEntry()) != null) {
                     if (e.isDirectory()) continue;
                     String n2 = e.getName();
                     // NB: META-INF/services/ des JiJ sont conservés (putIfAbsent) —
                     // xaerolib résout ses helpers platform via ServiceLoader.
+                    byte[] b2 = zin.readAllBytes();
                     if (n2.equals("fabric.mod.json")) {
                         // M7-B11 : métas JiJ conservées sous clé préfixée — le JiJ est
                         // un VRAI mod (entrypoints + mixins propres, ex. xaerolib pose
                         // XaeroLib.INSTANCE dans son entrypoint client) et doit être
                         // installé comme sous-mod AVANT son parent.
-                        out.putIfAbsent("irium-jij/" + n2, zin.readAllBytes());
+                        out.putIfAbsent("irium-jij/" + base + "/" + n2, b2);
                         continue;
                     }
-                    out.putIfAbsent(n2, zin.readAllBytes());
+                    // M7-B11c : ressources du JiJ (icône, assets) AUSSI préfixées pour
+                    // les entries propres du sous-mod (Mod Menu icônes) — la fusion
+                    // à plat expose voicechat.png avant icon.png du JiJ (collision).
+                    if (!n2.endsWith(".class")) {
+                        out.putIfAbsent("irium-jij/" + base + "/" + n2, b2);
+                    }
+                    out.putIfAbsent(n2, b2);
                 }
             }
         }

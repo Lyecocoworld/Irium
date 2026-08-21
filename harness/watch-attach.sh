@@ -3,7 +3,7 @@
 # 26.2.jar. Suit TOUS les PIDs (pas juste le dernier) — un attach par process,
 # jamais deux fois le même. Les PIDs disparus sont oubliés (Windows peut
 # réutiliser un PID pour un NOUVEAU client, qui doit alors être attaché).
-JAR="C:/Users/space/Code/Irium/agent/target/irium-agent-0.6.22.jar"
+JAR="C:/Users/space/Code/Irium/agent/target/irium-agent-0.6.23.jar"
 ATTACH_CP="C:/Users/space/Code/Irium/harness/.lab"
 JAVA="/c/Program Files/Eclipse Adoptium/jdk-25.0.3.9-hotspot/bin/java"
 declare -A DONE   # pid -> 1 (déjà attaché)
