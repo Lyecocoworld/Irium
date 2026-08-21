@@ -177,6 +177,7 @@ public final class MixinGateway {
 
     public static synchronized void addConfig(String configResource) {
         try {
+            IN_ADD_CONFIG.set(true);
             Mixins.addConfiguration(configResource);
             log("config mixin enregistrée: " + configResource);
         } catch (Throwable t) {
@@ -190,6 +191,8 @@ public final class MixinGateway {
             log(sb.toString());
             StackTraceElement[] st = t.getStackTrace();
             for (int i = 0; i < Math.min(5, st.length); i++) log("    at " + st[i]);
+        } finally {
+            IN_ADD_CONFIG.remove();
         }
     }
 
@@ -214,6 +217,33 @@ public final class MixinGateway {
         }
     }
 
+    /**
+     * M7-X13b : classes internes des mods streamés (noms avec '/'). Le jar mod
+     * est apposé au CP système (M7-B4 : identité unique des interfaces injectées
+     * dans MC) -> parent-first -> ModClassLoader.findClass (et son
+     * transformModClass M7-X13) n'est JAMAIS atteint : tout charge par le loader
+     * APP via le transformer JVMTI, qui filtrait tout sauf net/minecraft.
+     * Conséquence : les @Accessor/@Invoker statiques gardent leur stub
+     * `throw new AssertionError()` (sodium DebugScreenEntriesAccessor) ->
+     * entrypoint mort -> "Config not yet available" au mixin setFullscreen
+     * -> FATAL boot (01:17). Sur vraie Fabric, KnotClassLoader passe CHAQUE
+     * classe du mod par le pipeline MixinTransformer — on reproduit ça via
+     * l'allowlist JVMTI (identité de classe unique préservée : loader APP).
+     */
+    private static final java.util.Set<String> MOD_CLASSES = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** Anti ré-entrance : classe de mod chargée PENDANT addConfig (ex. MixinPlugin
+     *  custom de Xaero) -> ne PAS re-enter le runtime non-thread-safe
+     *  (ClassCircularityError -> config morte, M7-B11). Ces classes-là ne sont
+     *  pas des mixins : les laisser non transformées est le comportement d'avant. */
+    private static final ThreadLocal<Boolean> IN_ADD_CONFIG = ThreadLocal.withInitial(() -> false);
+
+    public static void registerModClasses(java.util.Collection<String> internalNames) {
+        int n = 0;
+        for (String s : internalNames) if (MOD_CLASSES.add(s)) n++;
+        if (n > 0) log(n + " classes de mod enregistrées pour le pipeline mixin (total " + MOD_CLASSES.size() + ")");
+    }
+
     static byte[] transform(String name, byte[] bytes) {
         // M7-B11 : ne transformer QUE les classes Minecraft. Un transformer JVMTI
         // global voit TOUT (java.io.*, classes des mods...) et le MixinTransformer
@@ -222,17 +252,58 @@ public final class MixinGateway {
         // pendant addConfig (ex. le MixinPlugin custom de Xaero) re-enter le
         // runtime non-thread-safe -> ClassCircularityError -> config morte.
         if (name == null || bytes == null) return null;
-        if (!(name.startsWith("net/minecraft/") || name.startsWith("com/mojang/"))) return null;
+        boolean mc = name.startsWith("net/minecraft/") || name.startsWith("com/mojang/");
+        // M7-X13b : classes des mods streamés -> pipeline (accessors etc.),
+        // sauf pendant addConfig (ré-entrance mortelle, cf. plus haut).
+        if (!mc) {
+            if (!MOD_CLASSES.contains(name)) return null;
+            if (IN_ADD_CONFIG.get()) return null; // comportement d'avant, pas un mixin
+        }
+        // M7-X3 : accessWidener AVANT mixin (même ordre que fabric-loader).
+        bytes = dev.irium.agent.module.AccessWidenerGateway.widen(name, bytes);
         IMixinTransformer t = lazyTransformer();
         if (t == null) return null;
         String dotted = name.replace('/', '.');
         try {
-            byte[] out = t.transformClassBytes(name, dotted, bytes);
+            // M7-X3 : sponge n'est PAS thread-safe. L'armement (addConfig, thread
+            // attach) mute les configs PENDANT que ce transform (thread main) itère
+            // -> ConcurrentModificationException (NativeLibrariesBootstrap 00:31) ->
+            // la classe perd ses mixins sans erreur visible. Même moniteur que
+            // addConfig : arment et transforms sérialisés. Reentrant : un transform
+            // qui déclenche un chargement re-enter librement.
+            byte[] out;
+            synchronized (MixinGateway.class) {
+                out = t.transformClassBytes(name, dotted, bytes);
+            }
             if (out == null) return null;
             return out;
         } catch (Throwable err) {
             log("mixin transform échec " + name + ": " + err);
             return null;
+        }
+    }
+
+    /**
+     * M7-X13 : les classes des MODS doivent passer par le MixinTransformer.
+     * Sur vraie Fabric, KnotClassLoader délègue CHAQUE classe au MixinService :
+     * c'est le transformer qui réécrit les @Accessor/@Invoker (le stub
+     * `throw new AssertionError` du compilateur devient le vrai forward).
+     * Sans ça, sodium DebugScreenEntriesAccessor.sodium$getEntries() garde son
+     * stub -> AssertionError -> entrypoint mort -> "Config not yet available"
+     * au mixin setFullscreen -> FATAL boot-loop (00:49).
+     * Même moniteur que transform()/addConfig : runtime sponge non thread-safe.
+     */
+    public static byte[] transformModClass(String name, byte[] bytes) {
+        IMixinTransformer t = lazyTransformer();
+        if (t == null) return bytes;
+        try {
+            synchronized (MixinGateway.class) {
+                byte[] out = t.transformClassBytes(name, name.replace('/', '.'), bytes);
+                return out == null ? bytes : out;
+            }
+        } catch (Throwable err) {
+            log("transformModClass échec " + name + ": " + err);
+            return bytes; // jamais casser le chargement d'un mod pour un mixin raté
         }
     }
 

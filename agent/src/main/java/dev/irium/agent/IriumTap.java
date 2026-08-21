@@ -145,7 +145,7 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
         if (!Boolean.getBoolean("irium.test.rejoin")) return;
         Thread t = new Thread(() -> {
             try {
-                Thread.sleep(8000); // laisser le 1er join finir d'installer
+                Thread.sleep(12000); // laisser le 1er join finir d'installer (+ self-test ModsScreen 3s)
                 dev.irium.agent.IriumAgent.log("[self-test:rejoin] START — wipe sandbox + ré-install (scénario crash 18:24)");
                 // 1. déconnexion simulée : la sandbox se vide
                 dev.irium.agent.module.FabricModHost.uninstallAll();

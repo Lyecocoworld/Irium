@@ -23,6 +23,8 @@ final class ModClassLoader extends ClassLoader {
         String path = name.replace('.', '/') + ".class";
         byte[] b = entries.get(path);
         if (b == null) throw new ClassNotFoundException(name);
+        // M7-X13 : passer par le MixinTransformer (accessors statiques etc.)
+        b = dev.irium.agent.mixin.MixinGateway.transformModClass(path, b);
         return defineClass(name, b, 0, b.length);
     }
 

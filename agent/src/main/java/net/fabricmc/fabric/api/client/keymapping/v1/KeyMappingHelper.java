@@ -10,23 +10,57 @@ import net.minecraft.client.KeyMapping;
 public final class KeyMappingHelper {
     private KeyMappingHelper() {}
 
+    /** M7-X3 : keybinds enregistrés avant la construction de Options (activation
+     *  précoce à `instance = this`, instruction ~91) — flushés au RETURN du ctor. */
+    private static final java.util.List<KeyMapping> PENDING = new java.util.concurrent.CopyOnWriteArrayList<>();
+
     /** Enregistre la keymap dans le registre client (options.txt accessible). */
     public static KeyMapping registerKeyMapping(KeyMapping mapping) {
+        PENDING.add(mapping);
+        tryFlush(mapping);
+        return mapping;
+    }
+
+    private static void tryFlush(KeyMapping mapping) {
         try {
-            // Minecraft.addKeyMapping est private -> via réflexion sur le champ
-            // options.keyMappings du Minecraft.getInstance()
             var mc = net.minecraft.client.Minecraft.getInstance();
+            if (mc == null || mc.options == null) return; // pas prêt -> reste en file
+            doRegister(mc, mapping);
+            PENDING.remove(mapping);
+        } catch (Throwable t) {
+            // best-effort : la keymap reste fonctionnelle via Category
+        }
+    }
+
+    /** Second stage du ctor Minecraft : options construits -> tout flusher. */
+    public static void flushPending() {
+        var mc = net.minecraft.client.Minecraft.getInstance();
+        if (mc == null || mc.options == null) return;
+        for (KeyMapping k : PENDING) {
+            try {
+                doRegister(mc, k);
+                PENDING.remove(k);
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    private static void doRegister(net.minecraft.client.Minecraft mc, KeyMapping mapping) {
+        // Minecraft.addKeyMapping est private -> via réflexion sur le champ
+        // options.keyMappings du Minecraft.getInstance()
+        try {
             var options = mc.options;
             java.lang.reflect.Field f = options.getClass().getDeclaredField("keyMappings");
             f.setAccessible(true);
             KeyMapping[] cur = (KeyMapping[]) f.get(options);
+            for (KeyMapping existing : cur) {
+                if (existing == mapping) return; // déjà là (double flush)
+            }
             KeyMapping[] next = java.util.Arrays.copyOf(cur, cur.length + 1);
             next[cur.length] = mapping;
             f.set(options, next);
         } catch (Throwable t) {
             // best-effort : la keymap reste fonctionnelle via Category
         }
-        return mapping;
     }
 
     /**

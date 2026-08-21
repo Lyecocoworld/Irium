@@ -78,6 +78,9 @@ public final class FabricModHost {
             }
         }
         m.mixins = new ArrayList<>();
+        if (o.has("accessWidener") && o.get("accessWidener").isJsonPrimitive()) {
+            m.accessWidener = o.get("accessWidener").getAsString();
+        }
         if (o.has("mixins")) {
             com.google.gson.JsonElement mx = o.get("mixins");
             if (mx.isJsonArray()) {
@@ -152,6 +155,8 @@ public final class FabricModHost {
         public String version;
         public Map<String, List<String>> entrypoints;
         public List<String> mixins;
+        /** M7-X3 : chemin du fichier .accesswidener (null si absent). */
+        public String accessWidener;
         public Map<String, Object> depends;
         public Map<String, Object> custom;
         /** icon du fabric.mod.json : String ("icon.png") ou Map{"16":"a.png","32":"b.png"}. */
@@ -461,6 +466,18 @@ public final class FabricModHost {
         }
 
         ModClassLoader loader = new ModClassLoader(entries);
+        // M7-X13b : enregistrer TOUTES les classes du jar (mod + JiJ fusionnés)
+        // dans l'allowlist du pipeline JVMTI — les @Accessor des mods doivent
+        // traverser le MixinTransformer même chargés par le loader APP.
+        java.util.List<String> modClassNames = new ArrayList<>();
+        for (String k : entries.keySet()) {
+            // nom INTERNE sans ".class" — c'est ce que reçoit le transformer JVMTI.
+            // Les JiJ sont fusionnés à plat (net/...), le préfixe irium-jij/ n'est
+            // que pour les ressources dupliquées.
+            if (k.endsWith(".class") && !k.startsWith("irium-jij/"))
+                modClassNames.add(k.substring(0, k.length() - ".class".length()));
+        }
+        MixinGateway.registerModClasses(modClassNames);
         // Racine M7-B4-5 : interfaces du mod injectees dans des classes MC -> le jar
         // doit etre visible du loader APP (identite de classe unique, cast possible)
         java.nio.file.Path modJar = materializeJar(meta.id, entries);
@@ -468,6 +485,12 @@ public final class FabricModHost {
         Mod mod = new Mod(meta.id, meta, loader);
         mod.entries = entries;
         MODS.put(meta.id, mod);
+
+        // M7-X3 : accessWidener — règles appliquées AVANT mixin (ordre
+        // fabric-loader). Early (premain) : les classes pas encore chargées
+        // seront widennées à leur définition via le pipeline transformer.
+        // Late (join) : retransform des classes ciblées déjà chargées.
+        java.util.Set<String> awRetransform = applyAccessWidener(meta, entries, early);
 
         // M7-B11 : sous-mods JiJ (ex. xaerolib) — VRAIS mods avec entrypoints et
         // mixins propres. Sur vraie Fabric le loader les découvre et les initialise
@@ -537,7 +560,18 @@ public final class FabricModHost {
             }
         }
 
+        // M7-X3 : classes AW déjà chargées (install late) -> retransform pour
+        // appliquer les flags. ÉCHEC NON FATAL : une classe non widennée
+        // nécessite un restart (comme les mixins déjà chargés).
+        if (!awRetransform.isEmpty()) {
+            MixinGateway.retransform(awRetransform.toArray(new String[0]));
+        }
+
         if (early) {
+            // M7-X3 : preLaunch (ex. sodium : env checks + GPU probe + workarounds).
+            // Sur vraie Fabric : avant le jeu. Ici : fin d'armement boot.
+            runEntrypoint(mod, "preLaunch", net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint.class,
+                    pl -> pl.onPreLaunch());
             IriumAgent.log("[fabric-mod] '" + meta.id + "' arme au boot (configs mixin only)");
             return; // entrypoints au join, pas avant le boot MC
         }
@@ -565,6 +599,47 @@ public final class FabricModHost {
     }
 
     private interface Init<T> { void run(T t); }
+
+    /**
+     * M7-X3 : extrait le .accesswidener du jar, cumule les règles dans
+     * AccessWidener.ACTIVE et retourne les owners déjà chargés à retransformer
+     * (install late). En early (premain), retourne vide : les classes seront
+     * widennées à leur définition par le pipeline transformer.
+     */
+    private static java.util.Set<String> applyAccessWidener(ModJarMeta meta, Map<String, byte[]> entries, boolean early) {
+        if (meta.accessWidener == null) return java.util.Collections.emptySet();
+        byte[] awb = entries.get(meta.accessWidener);
+        if (awb == null) {
+            IriumAgent.log("[fabric-mod] accessWidener '" + meta.accessWidener + "' introuvable dans le jar -> ignoré");
+            return java.util.Collections.emptySet();
+        }
+        Map<String, List<AccessWidener.Rule>> rules = AccessWidener.parse(new String(awb, StandardCharsets.UTF_8));
+        int n = rules.values().stream().mapToInt(List::size).sum();
+        AccessWidener.ACTIVE.putAll(rules);
+        // owners dé-finalisables (règles extendable member)
+        for (List<AccessWidener.Rule> rs : rules.values()) {
+            for (AccessWidener.Rule r : rs) {
+                if (!r.isClass && !r.accessible) AccessWidener.EXTENDABLE_OWNERS.add(r.owner);
+            }
+        }
+        IriumAgent.log("[fabric-mod] accessWidener '" + meta.id + "': " + n + " règle(s), "
+                + rules.size() + " classe(s) ciblée(s)");
+        if (early) return java.util.Collections.emptySet();
+        // late : retransformer les owners déjà chargés (les autres seront
+        // widennées à leur définition)
+        java.util.Set<String> toRetransform = new java.util.LinkedHashSet<>();
+        for (String owner : rules.keySet()) {
+            String dotted = owner.replace('/', '.');
+            try {
+                Class.forName(dotted, false, FabricModHost.class.getClassLoader());
+                toRetransform.add(dotted); // déjà chargée -> retransform
+            } catch (ClassNotFoundException notLoaded) {
+                // pas encore chargée -> sera widennée à la définition
+            } catch (Throwable ignored) {}
+        }
+        return toRetransform;
+    }
+
 
     /** M7-B11 : sous-mods JiJ d'un mod parent (activation au join, avant le parent). */
     private static List<Mod> jijModsOf(Mod parent) {
@@ -731,8 +806,10 @@ public final class FabricModHost {
                 }
             });
         }
-        Mod m = MODS.get(modId);
-        if (m == null) return Optional.empty();
+        Mod found = MODS.get(modId);
+        if (found == null) found = GHOSTS.get(modId); // ghost : queryable après wipe (crash 19:40)
+        if (found == null) return Optional.empty();
+        final Mod m = found;
         return Optional.of(new net.fabricmc.loader.api.ModContainer() {
             @Override public net.fabricmc.loader.api.metadata.ModMetadata getMetadata() { return metaOf(m); }
             @Override public List<Path> getRootPaths() {
@@ -913,7 +990,10 @@ public final class FabricModHost {
 
     public static Collection<net.fabricmc.loader.api.ModContainer> allContainers() {
         List<net.fabricmc.loader.api.ModContainer> out = new ArrayList<>();
-        for (String id : MODS.keySet()) container(id).ifPresent(out::add);
+        // MODS d'abord, puis ghosts jamais présents (mods uninstallés mais queryables)
+        java.util.LinkedHashSet<String> ids = new java.util.LinkedHashSet<>(MODS.keySet());
+        ids.addAll(GHOSTS.keySet());
+        for (String id : ids) container(id).ifPresent(out::add);
         return out;
     }
 
@@ -944,14 +1024,23 @@ public final class FabricModHost {
 
     /* ---------------- sandbox ---------------- */
 
+    /** métadonnées des mods désinstallés (ghost containers) : la sandbox se vide
+     *  à la déconnexion MAIS les classes restent chargées (singletons vivants).
+     *  Mod Menu cache sa liste et fait getModContainer(id).orElseThrow() au
+     *  rendu -> un wipe pendant qu'un écran mod est ouvert = FATAL (crash 19:40).
+     *  Les mods désinstallés restent donc QUERYABLES (métas + icône), comme sur
+     *  vraie Fabric où un mod installé n'est jamais dé-chargé. */
+    private static final Map<String, Mod> GHOSTS = new ConcurrentHashMap<>();
+
     public static synchronized void uninstallAll() {
         int n = MODS.size();
+        for (Map.Entry<String, Mod> e : MODS.entrySet()) GHOSTS.putIfAbsent(e.getKey(), e.getValue());
         MODS.clear();
         BY_CLASS.clear();
         net.fabricmc.fabric.impl.client.networking.ClientNetworkingImpl.clear();
         dev.irium.agent.hud.FabricHudBridge.clearAll();
         IriumPackSource.clear();
-        IriumAgent.log("[fabric-mod] sandbox vidée (" + n + " mod(s))");
+        IriumAgent.log("[fabric-mod] sandbox vidée (" + n + " mod(s), " + GHOSTS.size() + " ghost(s))");
     }
 
     /* ---------------- utilitaires ---------------- */
