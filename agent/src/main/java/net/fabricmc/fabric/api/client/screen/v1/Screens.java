@@ -1,34 +1,27 @@
 package net.fabricmc.fabric.api.client.screen.v1;
 
+import java.util.List;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
 
 /**
- * Surface Irium — fabric-screen-api-v1 Screens. Le vrai impl passe par
- * ScreenExtensions (mixin) ; ici on lit directement les enfants du screen :
- * getWidgets retourne les AbstractWidget de la children list (ce que
- * ModMenu fait pour insérer son bouton "Mods" dans le TitleScreen).
+ * Adaptateur Irium — accès aux widgets d'un Screen (fabric-screen-api-v1).
+ * M7-X2 : Screens.getWidgets référencé par Mod Menu / JEI / MouseTweaks.
  */
 public final class Screens {
-
     private Screens() {}
 
     @SuppressWarnings("unchecked")
-    public static java.util.List<net.minecraft.client.gui.components.AbstractWidget> getWidgets(Screen screen) {
-        java.util.Objects.requireNonNull(screen, "Screen cannot be null");
-        java.util.List<net.minecraft.client.gui.components.AbstractWidget> out = new java.util.ArrayList<>();
-        for (net.minecraft.client.gui.components.events.GuiEventListener child : screen.children()) {
-            if (child instanceof net.minecraft.client.gui.components.AbstractWidget w) out.add(w);
+    public static List<AbstractWidget> getWidgets(Screen screen) {
+        try {
+            var children = screen.children();
+            java.util.List<AbstractWidget> out = new java.util.ArrayList<>();
+            for (Object c : children) {
+                if (c instanceof AbstractWidget w) out.add(w);
+            }
+            return out;
+        } catch (Throwable t) {
+            return java.util.List.of();
         }
-        return out;
-    }
-
-    public static net.minecraft.client.gui.Font getFont(Screen screen) {
-        java.util.Objects.requireNonNull(screen, "Screen cannot be null");
-        return screen.getFont();
-    }
-
-    public static net.minecraft.client.Minecraft getMinecraft(Screen screen) {
-        java.util.Objects.requireNonNull(screen, "Screen cannot be null");
-        return net.minecraft.client.Minecraft.getInstance();
     }
 }

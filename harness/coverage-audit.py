@@ -36,8 +36,11 @@ for fn in sorted(os.listdir(SURVEY)):
         continue
     z = zipfile.ZipFile(os.path.join(SURVEY, fn))
     try:
-        fmj = json.loads(z.read('fabric.mod.json'))
+        fmj = json.loads(z.read('fabric.mod.json'), strict=False)  # contrôle chars tolérés (mods réels)
     except KeyError:
+        continue
+    except json.JSONDecodeError:
+        print(f'  [fmj illisible] {fn}')
         continue
     for k in fmj:
         if k not in PARSED_FIELDS and k not in IGNORED:

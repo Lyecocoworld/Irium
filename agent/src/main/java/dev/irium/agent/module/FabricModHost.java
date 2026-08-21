@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import dev.irium.agent.IriumAgent;
 import dev.irium.agent.mixin.MixinGateway;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.fabricmc.loader.api.metadata.CustomValue;
 import net.fabricmc.loader.api.metadata.ModMetadata;
 import net.minecraft.resources.Identifier;
 
@@ -35,7 +36,81 @@ import java.util.zip.ZipInputStream;
  */
 public final class FabricModHost {
 
+    /**
+     * M7-X2 : parseur fmj tolérant — GSON strict jette sur des formes LÉGALES
+     * de la spec fabric.mod.json (vérifié empiriquement, voir TestGson) :
+     *  - entrypoints string shorthand {"client": "com.x.Init"}
+     *  - entrypoints objets {"client": [{"adapter":"kotlin","value":"..."}]}
+     *  - authors objets [{"name":"Bob","contact":{...}}]
+     * Un throw GSON = MOD ENTIÈREMENT REFUSÉ (silencieux). On parse via
+     * JsonTree -> ModJarMeta à la main, jamais de JsonSyntaxException.
+     */
     private static final Gson GSON = new Gson();
+
+    static ModJarMeta parseFmj(String json) {
+        com.google.gson.JsonObject o = com.google.gson.JsonParser.parseString(json).getAsJsonObject();
+        ModJarMeta m = new ModJarMeta();
+        m.id = jsonStr(o, "id");
+        m.version = jsonStr(o, "version");
+        m.name = jsonStr(o, "name");
+        m.description = jsonStr(o, "description");
+        m.icon = o.has("icon") && !o.get("icon").isJsonNull() ? GSON.fromJson(o.get("icon"), Object.class) : null;
+        m.authors = o.has("authors") && !o.get("authors").isJsonNull() ? GSON.fromJson(o.get("authors"), Object.class) : null;
+        m.license = o.has("license") && !o.get("license").isJsonNull() ? GSON.fromJson(o.get("license"), Object.class) : null;
+        m.custom = o.has("custom") && o.get("custom").isJsonObject()
+                ? GSON.fromJson(o.get("custom"), Map.class) : null;
+        m.contact = o.has("contact") && o.get("contact").isJsonObject()
+                ? GSON.fromJson(o.get("contact"), Map.class) : null;
+        m.entrypoints = new java.util.LinkedHashMap<>();
+        if (o.has("entrypoints") && o.get("entrypoints").isJsonObject()) {
+            for (Map.Entry<String, com.google.gson.JsonElement> e : o.getAsJsonObject("entrypoints").entrySet()) {
+                List<String> names = new ArrayList<>();
+                if (e.getValue().isJsonArray()) {
+                    for (com.google.gson.JsonElement el : e.getValue().getAsJsonArray()) {
+                        collectEntrypointValue(el, names);
+                    }
+                } else if (e.getValue().isJsonObject()) {
+                    collectEntrypointValue(e.getValue(), names); // {"adapter":..., "value":...}
+                } else if (e.getValue().isJsonPrimitive()) {
+                    names.add(e.getValue().getAsString()); // shorthand string
+                }
+                m.entrypoints.put(e.getKey(), names);
+            }
+        }
+        m.mixins = new ArrayList<>();
+        if (o.has("mixins")) {
+            com.google.gson.JsonElement mx = o.get("mixins");
+            if (mx.isJsonArray()) {
+                for (com.google.gson.JsonElement el : mx.getAsJsonArray()) {
+                    if (el.isJsonPrimitive()) m.mixins.add(el.getAsString());
+                }
+            } else if (mx.isJsonObject()) { // extension Quilt: {"client":[...], "common":[...]}
+                for (com.google.gson.JsonElement arr : mx.getAsJsonObject().asMap().values()) {
+                    if (arr.isJsonArray()) {
+                        for (com.google.gson.JsonElement el : arr.getAsJsonArray()) {
+                            if (el.isJsonPrimitive()) m.mixins.add(el.getAsString());
+                        }
+                    }
+                }
+            }
+        }
+        return m;
+    }
+
+    private static String jsonStr(com.google.gson.JsonObject o, String k) {
+        return o.has(k) && o.get(k).isJsonPrimitive() ? o.get(k).getAsString() : null;
+    }
+
+    /** String simple OU objet {adapter, value} (kotlin/quilt) -> extraire "value". */
+    private static void collectEntrypointValue(com.google.gson.JsonElement el, List<String> out) {
+        if (el.isJsonPrimitive()) {
+            out.add(el.getAsString());
+        } else if (el.isJsonObject()) {
+            com.google.gson.JsonObject ob = el.getAsJsonObject();
+            if (ob.has("value") && ob.get("value").isJsonPrimitive()) out.add(ob.get("value").getAsString());
+            // adapter différent (kotlin, quartet...) : la valeur reste un FQCN chargeable
+        }
+    }
 
     /** mods chargés : modId -> mod */
     private static final Map<String, Mod> MODS = new ConcurrentHashMap<>();
@@ -283,7 +358,7 @@ public final class FabricModHost {
             Map<String, byte[]> entries = unzip(jarBytes);
             byte[] fmj = entries.get("fabric.mod.json");
             if (fmj == null) return null;
-            return GSON.fromJson(new String(fmj, StandardCharsets.UTF_8), ModJarMeta.class);
+            return parseFmj(new String(fmj, StandardCharsets.UTF_8));
         } catch (Throwable t) { return null; }
     }
 
@@ -333,7 +408,7 @@ public final class FabricModHost {
         Map<String, byte[]> entries = unzip(modJarBytes);
         byte[] fmj = entries.get("fabric.mod.json");
         if (fmj == null) { IriumAgent.log("[fabric-mod] pas de fabric.mod.json -> refus"); return; }
-        ModJarMeta meta = GSON.fromJson(new String(fmj, StandardCharsets.UTF_8), ModJarMeta.class);
+        ModJarMeta meta = parseFmj(new String(fmj, StandardCharsets.UTF_8));
         if (meta.id == null || meta.id.isBlank()) { IriumAgent.log("[fabric-mod] id absent -> refus"); return; }
 
         if (MODS.containsKey(meta.id)) {
@@ -388,8 +463,8 @@ public final class FabricModHost {
         for (String k : entries.keySet()) {
             if (!k.startsWith("irium-jij/") || !k.endsWith("/fabric.mod.json")) continue;
             try {
-                ModJarMeta jm = GSON.fromJson(
-                        new String(entries.get(k), StandardCharsets.UTF_8), ModJarMeta.class);
+                ModJarMeta jm = parseFmj(
+                        new String(entries.get(k), StandardCharsets.UTF_8));
                 if (jm == null || jm.id == null || jm.id.isBlank() || MODS.containsKey(jm.id)) continue;
                 // le JiJ partage le classloader du parent (classes déjà fusionnées)
                 Mod sub = new Mod(jm.id, jm, loader);
@@ -696,14 +771,20 @@ public final class FabricModHost {
             @Override public String getDescription() {
                 return m.meta.description == null ? "" : m.meta.description;
             }
-            /** M7-B11d : authors (String ou List dans le fmj). */
+            /** M7-B11d : authors (String, liste de strings, OU liste d'objets
+             *  {name, contact} — forme standard des gros mods). */
             @Override public java.util.Collection<net.fabricmc.loader.api.metadata.Person> getAuthors() {
                 java.util.List<net.fabricmc.loader.api.metadata.Person> out = new java.util.ArrayList<>();
                 Object a = m.meta.authors;
                 if (a instanceof String s) {
                     out.add(person(s));
                 } else if (a instanceof List<?> l) {
-                    for (Object o : l) if (o instanceof String s) out.add(person(s));
+                    for (Object o : l) {
+                        if (o instanceof String s) out.add(person(s));
+                        else if (o instanceof Map<?, ?> mo && mo.get("name") instanceof String nm) {
+                            out.add(person(nm, mo.get("contact")));
+                        }
+                    }
                 }
                 return out;
             }
@@ -733,6 +814,25 @@ public final class FabricModHost {
                     @Override public java.util.Map<String, String> asMap() { return flat; }
                 };
             }
+            /** M7-X2 : custom values RÉELLES du fmj (Mod Menu lit custom.modmenu:*,
+             *  badges/links/api_level ; Sodium lit custom sodium.options...). */
+            @Override public boolean containsCustomValue(String key) {
+                return m.meta.custom != null && m.meta.custom.containsKey(key);
+            }
+            @Override public CustomValue getCustomValue(String key) {
+                if (m.meta.custom == null) return null;
+                Object v = m.meta.custom.get(key);
+                return v == null ? null : CustomValue.of(v);
+            }
+            @Override public java.util.Map<String, CustomValue> getCustomValues() {
+                java.util.Map<String, CustomValue> out = new java.util.HashMap<>();
+                if (m.meta.custom != null) {
+                    for (Map.Entry<String, Object> e : m.meta.custom.entrySet()) {
+                        out.put(e.getKey(), CustomValue.of(e.getValue()));
+                    }
+                }
+                return out;
+            }
             /** M7-B11 : Mod Menu lit l'icône (getIcon -> requireNonNull sinon crash). */
             @Override public java.util.Optional<String> getIconPath(int size) {
                 Object ic = m.meta.icon;
@@ -756,11 +856,30 @@ public final class FabricModHost {
         };
     }
 
-    /** M7-B11d : Person minimal (nom seul — le fmj peut avoir des authors objets,
-     *  on ne prend que les strings). */
+    /** M7-B11d : Person minimal. Les authors objets du fmj portent name + contact. */
     private static net.fabricmc.loader.api.metadata.Person person(String name) {
         return new net.fabricmc.loader.api.metadata.Person() {
             @Override public String getName() { return name; }
+        };
+    }
+
+    /** M7-X2 : Person avec contact ({homepage, sources, issues} de l'author). */
+    private static net.fabricmc.loader.api.metadata.Person person(String name, Object contact) {
+        java.util.Map<String, String> flat = new java.util.HashMap<>();
+        if (contact instanceof Map<?, ?> cm) {
+            for (Map.Entry<?, ?> e : cm.entrySet()) {
+                if (e.getValue() instanceof String s) flat.put(String.valueOf(e.getKey()), s);
+            }
+        }
+        return new net.fabricmc.loader.api.metadata.Person() {
+            @Override public String getName() { return name; }
+            @Override public net.fabricmc.loader.api.metadata.ContactInformation getContact() {
+                if (flat.isEmpty()) return net.fabricmc.loader.api.metadata.Person.super.getContact();
+                return new net.fabricmc.loader.api.metadata.ContactInformation() {
+                    @Override public java.util.Optional<String> get(String key) { return java.util.Optional.ofNullable(flat.get(key)); }
+                    @Override public java.util.Map<String, String> asMap() { return flat; }
+                };
+            }
         };
     }
 

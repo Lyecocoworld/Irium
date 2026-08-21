@@ -28,7 +28,7 @@ def desc_clean(d):
         c = d[i]
         if c == 'L':
             j = d.index(';', i)
-            name = d[i+1:j].replace('/', '.'); i = j
+            name = d[i+1:j].replace('/', '.'); i = j + 1
         else:
             name = PRIM.get(c, c); i += 1
         args.append(name + arr)
@@ -43,9 +43,9 @@ def desc_clean(d):
     return args, ret
 
 def agent_surface(agent_jar):
-    """{(classe_interne): {('name', ('arg1','arg2'), 'ret')}} depuis javap -p."""
+    """{(classe_interne): {(sig)}} depuis javap -p — inclut les classes internes."""
     z = zipfile.ZipFile(agent_jar)
-    classes = [n[:-6] for n in z.namelist() if n.startswith('net/fabricmc/') and n.endswith('.class') and '$' not in n]
+    classes = [n[:-6] for n in z.namelist() if n.startswith('net/fabricmc/') and n.endswith('.class')]
     surface = collections.defaultdict(set)
     for i in range(0, len(classes), 40):
         batch = classes[i:i+40]
@@ -66,12 +66,11 @@ def agent_surface(agent_jar):
     return surface
 
 def match(sig_set, name, desc):
-    """Une signature javap 'name(args)' matche-t-elle le descripteur ?"""
+    """Une signature javap 'modifs Ret name(args);' matche-t-elle le descripteur ?"""
     args, ret = desc_clean(desc)
-    want = name + '(' + ', '.join(args) + (')' if args else ')')
-    want_nosp = name + '(' + ''.join(args) + ')'
+    pat = re.compile(r'\b' + re.escape(name) + r'\s*\(')
     for s in sig_set:
-        if not s.startswith(name + '('):
+        if not pat.search(s):
             continue
         # extraire les params javap
         body = s[s.index('(')+1:s.rindex(')')]
@@ -89,6 +88,12 @@ def match(sig_set, name, desc):
         norm = [p.split('<')[0] for p in params]
         target = [a.split('<')[0] for a in args]
         if norm == target:
+            return True
+        # variables de type (T, R...) : javap affiche le type var, le descripteur
+        # a le effacé (Object ou le bound) -> matcher par longueur
+        if len(norm) == len(target) and all(
+                p.isidentifier() and len(p) <= 2 and p not in ('int', 'long')
+                for p in norm):
             return True
     return False
 
