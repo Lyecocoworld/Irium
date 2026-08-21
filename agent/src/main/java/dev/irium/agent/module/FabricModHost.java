@@ -52,7 +52,9 @@ public final class FabricModHost {
         volatile List<Mod> jij;
         /** M7-B12 : vrai si ce Mod est un sous-mod JiJ (activé via son parent, jamais en boucle directe). */
         boolean isJij;
-        Mod(String id, ModJarMeta meta, ModClassLoader loader) { this.id = id; this.meta = meta; this.loader = loader; }
+        /** M7-B11 : entrées du jar en mémoire (icônes, assets — getPath). */
+        volatile Map<String, byte[]> entries;
+        Mod(String id, ModJarMeta meta, ModClassLoader loader) { this.id = id; meta.getClass(); this.meta = meta; this.loader = loader; }
     }
 
     /** fabric.mod.json (surface utile). */
@@ -63,6 +65,8 @@ public final class FabricModHost {
         public List<String> mixins;
         public Map<String, Object> depends;
         public Map<String, Object> custom;
+        /** icon du fabric.mod.json : String ("icon.png") ou Map{"16":"a.png","32":"b.png"}. */
+        public Object icon;
     }
 
     /* ---------------- M7-B6 : cache par serveur + armement au boot ---------------- */
@@ -365,6 +369,7 @@ public final class FabricModHost {
         java.nio.file.Path modJar = materializeJar(meta.id, entries);
         MixinGateway.appendModToSystemClassPath(modJar);
         Mod mod = new Mod(meta.id, meta, loader);
+        mod.entries = entries;
         MODS.put(meta.id, mod);
 
         // M7-B11 : sous-mods JiJ (ex. xaerolib) — VRAIS mods avec entrypoints et
@@ -571,12 +576,40 @@ public final class FabricModHost {
             out.add(new net.fabricmc.loader.api.entrypoint.EntrypointContainer<>() {
                 @Override public T getEntrypoint() { return t; }
                 @Override public String getDefinition() { return "irium"; }
+                @Override public net.fabricmc.loader.api.ModContainer getProvider() {
+                    return dev.irium.agent.module.FabricLoaderClient.modContainer();
+                }
             });
         }
         return out;
     }
 
     public static Optional<net.fabricmc.loader.api.ModContainer> container(String modId) {
+        // M7-B11 : conteneur virtuel "irium" — l'agent EST l'hôte des mods
+        // streamés (getProvider() des EntrypointContainer, Mod Menu...).
+        if ("irium".equals(modId)) {
+            return Optional.of(new net.fabricmc.loader.api.ModContainer() {
+                @Override public net.fabricmc.loader.api.metadata.ModMetadata getMetadata() {
+                    return new ModMetadata() {
+                        @Override public String getId() { return "irium"; }
+                        @Override public net.fabricmc.loader.api.Version getVersion() {
+                            return net.fabricmc.loader.api.SemanticVersion.parse("0.6.19");
+                        }
+                        @Override public String getName() { return "Irium"; }
+                        @Override public String getType() { return "fabric"; }
+                    };
+                }
+                @Override public List<Path> getRootPaths() {
+                    try {
+                        return List.of(Path.of(dev.irium.agent.IriumAgent.class
+                                .getProtectionDomain().getCodeSource().getLocation().toURI()));
+                    } catch (Throwable t) { return List.of(Path.of(".")); }
+                }
+                @Override public net.fabricmc.loader.api.metadata.ModOrigin getOrigin() {
+                    return ModOriginIRIUM.INSTANCE;
+                }
+            });
+        }
         Mod m = MODS.get(modId);
         if (m == null) return Optional.empty();
         return Optional.of(new net.fabricmc.loader.api.ModContainer() {
@@ -584,6 +617,28 @@ public final class FabricModHost {
             @Override public List<Path> getRootPaths() {
                 java.nio.file.Path jp = m.jarPath;
                 return jp != null ? List.of(jp) : List.of(Path.of("."));
+            }
+            /** M7-B11 : Mod Menu icônes — getPath doit donner un FICHIER lisible,
+             *  pas un chemin virtuel dans le jar zip. Extraction à la demande. */
+            @Override public Path getPath(String file) {
+                Map<String, byte[]> en = m.entries;
+                if (en != null) {
+                    String key = file.startsWith("/") ? file.substring(1) : file;
+                    byte[] b = en.get(key);
+                    if (b != null) {
+                        try {
+                            java.nio.file.Path dir = java.nio.file.Path.of(
+                                    System.getProperty("java.io.tmpdir"), "irium-modfiles", m.id);
+                            java.nio.file.Files.createDirectories(dir);
+                            java.nio.file.Path out = dir.resolve(key.replace('/', '_'));
+                            if (!java.nio.file.Files.exists(out)) {
+                                java.nio.file.Files.write(out, b);
+                            }
+                            return out;
+                        } catch (Throwable ignored) {}
+                    }
+                }
+                return net.fabricmc.loader.api.ModContainer.super.getPath(file);
             }
             @Override public net.fabricmc.loader.api.metadata.ModOrigin getOrigin() {
                 // M7-B11 : Xaero lit getOrigin().getPaths().get(0).getFileName()
@@ -619,6 +674,26 @@ public final class FabricModHost {
             }
             @Override public String getName() { return m.id; }
             @Override public String getType() { return "fabric"; }
+            /** M7-B11 : Mod Menu lit l'icône (getIcon -> requireNonNull sinon crash). */
+            @Override public java.util.Optional<String> getIconPath(int size) {
+                Object ic = m.meta.icon;
+                if (ic instanceof String s) return java.util.Optional.of(s);
+                if (ic instanceof Map<?, ?> map && !map.isEmpty()) {
+                    // prendre la plus grande clé <= size, sinon la plus grande
+                    Object best = null; int bestK = -1;
+                    for (Map.Entry<?, ?> e : map.entrySet()) {
+                        try {
+                            int k = Integer.parseInt(String.valueOf(e.getKey()));
+                            if (k <= size && k > bestK) { bestK = k; best = e.getValue(); }
+                        } catch (NumberFormatException ignored) {}
+                    }
+                    if (best == null) { // aucune <= size : prendre la première
+                        best = map.values().iterator().next();
+                    }
+                    if (best instanceof String s) return java.util.Optional.of(s);
+                }
+                return java.util.Optional.empty();
+            }
         };
     }
 

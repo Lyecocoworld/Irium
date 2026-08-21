@@ -42,6 +42,38 @@ public final class MixinGateway {
             // l'environnement n'existe pas encore ("Environment conflict").
             MixinBootstrap.init();
             Mixins.addConfiguration("irium.mixins.json");
+            // M7-B11 : sponge 0.8.7 bride MAX_SUPPORTED à JAVA_13 -> les mods
+            // récents déclarent JAVA_21/JAVA_25 et leur config ENTIERE est
+            // rejetée (MixinInitialisationError, ex. mixins.modmenu.json).
+            // MAX_SUPPORTED est un champ public static NON-final -> on l'élève.
+            try {
+                Class<?> cl = Class.forName(
+                        "org.spongepowered.asm.mixin.MixinEnvironment$CompatibilityLevel");
+                java.lang.reflect.Field f = cl.getField("MAX_SUPPORTED");
+                f.set(null, cl.getField("JAVA_25").get(null));
+                log("CompatibilityLevel.MAX_SUPPORTED élevé à JAVA_25");
+            } catch (Throwable compat) {
+                log("MAX_SUPPORTED inchangé: " + compat);
+            }
+            // M7-B11 : la détection ASM de sponge lit Opcodes.getDeclaredFields()
+            // dans l'ordre de déclaration : ASM10_EXPERIMENTAL (bit experimental
+            // -> ignoré pour la version) puis ASM9 -> conclut "ASM 9.0" alors
+            // qu'on embarque 9.9.1. JAVA_25.isSupported() exige ASM >= 9.8 ->
+            // config rejetée. On force les champs de version détectée.
+            try {
+                Class<?> asm = Class.forName("org.spongepowered.asm.util.asm.ASM");
+                java.lang.reflect.Field maj = asm.getDeclaredField("majorVersion");
+                java.lang.reflect.Field min = asm.getDeclaredField("minorVersion");
+                java.lang.reflect.Field imin = asm.getDeclaredField("implMinorVersion");
+                java.lang.reflect.Field pat = asm.getDeclaredField("patchVersion");
+                maj.setAccessible(true); min.setAccessible(true);
+                imin.setAccessible(true); pat.setAccessible(true);
+                maj.setInt(null, 9); min.setInt(null, 9);
+                imin.setInt(null, 9); pat.setInt(null, 1);
+                log("ASM détecté forcé à 9.9.1 (sponge lit ASM10_EXPERIMENTAL→9.0)");
+            } catch (Throwable asmv) {
+                log("version ASM inchangée: " + asmv);
+            }
             // Racine M7-B4 : à l'attach à chaud, PERSONNE n'a instancié le MixinTransformer
             // (c'est normalement le rôle du launcher hôte). getActiveTransformer() = null
             // pour toujours -> transform() no-op silencieux -> retransform sans effet.
@@ -148,7 +180,16 @@ public final class MixinGateway {
             Mixins.addConfiguration(configResource);
             log("config mixin enregistrée: " + configResource);
         } catch (Throwable t) {
-            log("échec config mixin " + configResource + ": " + t);
+            StringBuilder sb = new StringBuilder("échec config mixin " + configResource + ": " + t);
+            Throwable c = t.getCause();
+            int depth = 0;
+            while (c != null && depth++ < 6) {
+                sb.append(" <- cause: ").append(c);
+                c = c.getCause();
+            }
+            log(sb.toString());
+            StackTraceElement[] st = t.getStackTrace();
+            for (int i = 0; i < Math.min(5, st.length); i++) log("    at " + st[i]);
         }
     }
 

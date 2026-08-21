@@ -16,6 +16,12 @@ import java.util.Optional;
  */
 public final class FabricLoaderClient implements FabricLoader {
 
+    /** Le conteneur "irium" lui-même (provider par défaut des entrypoints). */
+    static net.fabricmc.loader.api.ModContainer modContainer() {
+        return net.fabricmc.loader.api.FabricLoader.getInstance()
+                .getModContainer("irium").orElse(null);
+    }
+
     @Override
     public <T> List<T> getEntrypoints(String key, Class<T> type) {
         return FabricModHost.entrypoints(key, type);
