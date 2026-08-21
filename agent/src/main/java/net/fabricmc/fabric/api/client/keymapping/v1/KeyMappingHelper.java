@@ -28,4 +28,22 @@ public final class KeyMappingHelper {
         }
         return mapping;
     }
+
+    /**
+     * M7-X3 : clé actuellement liée. SVC PTTKeyHandler.onMouseEvent l'appelle au
+     * PREMIER CLIC SOURIS (crash 19:26 — NoSuchMethodError FATAL). Le vrai fabric
+     * utilise un mixin accessor ; ici réflexion sur le champ protégé `key`,
+     * fallback getDefaultKey().
+     */
+    public static com.mojang.blaze3d.platform.InputConstants.Key getBoundKeyOf(KeyMapping mapping) {
+        try {
+            java.lang.reflect.Field f = KeyMapping.class.getDeclaredField("key");
+            f.setAccessible(true);
+            com.mojang.blaze3d.platform.InputConstants.Key k =
+                    (com.mojang.blaze3d.platform.InputConstants.Key) f.get(mapping);
+            return k != null ? k : mapping.getDefaultKey();
+        } catch (Throwable t) {
+            return mapping.getDefaultKey();
+        }
+    }
 }

@@ -134,6 +134,43 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
         t.start();
     }
 
+    /**
+     * M7-X3 : self-test rejoin — reproduit le crash user 18:24 (déconnexion ->
+     * sandbox vidée -> rejoin -> ré-install des mods). Avant fix : le 2e
+     * newInstance() écrasait le singleton Xaero avec un objet à moitié construit
+     * -> NPE xaeroHudFabric à chaque tick -> FATAL. Après : "instance conservée".
+     * Activé par -Dirium.test.rejoin=true (bot/harnais).
+     */
+    public static void selfTestRejoin() {
+        if (!Boolean.getBoolean("irium.test.rejoin")) return;
+        Thread t = new Thread(() -> {
+            try {
+                Thread.sleep(8000); // laisser le 1er join finir d'installer
+                dev.irium.agent.IriumAgent.log("[self-test:rejoin] START — wipe sandbox + ré-install (scénario crash 18:24)");
+                // 1. déconnexion simulée : la sandbox se vide
+                dev.irium.agent.module.FabricModHost.uninstallAll();
+                // 2. rejoin : le serveur renvoie le MODSET -> ré-install des mêmes jars
+                java.nio.file.Path dir = dev.irium.agent.module.FabricModHost.serverDirPub("127.0.0.1_25599");
+                int n = 0;
+                try (var s = java.nio.file.Files.list(dir)) {
+                    for (java.nio.file.Path jar : (Iterable<java.nio.file.Path>) s::iterator) {
+                        if (!jar.toString().endsWith(".jar")) continue;
+                        dev.irium.agent.module.FabricModHost.install(java.nio.file.Files.readAllBytes(jar));
+                        n++;
+                    }
+                }
+                dev.irium.agent.IriumAgent.log("[self-test:rejoin] ré-installé " + n + " jar(s) — si le singleton est cassé, NPE dans ~2s");
+                // 3. observation : laisser tourner les ticks 5s (le NPE 18:24 tuait en <2s)
+                Thread.sleep(5000);
+                dev.irium.agent.IriumAgent.log("[self-test:rejoin] PASS — 5s de ticks sans FATAL/NPE");
+            } catch (Throwable t2) {
+                dev.irium.agent.IriumAgent.log("[self-test:rejoin] échec: " + t2);
+            }
+        }, "irium-selftest-rejoin");
+        t.setDaemon(true);
+        t.start();
+    }
+
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         dev.irium.agent.module.ModuleManager.close(ctx.channel()); // sandbox : tout retombe
@@ -146,6 +183,7 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
     /** Fabric JOIN/DISCONNECT — portés par le tap, jamais d'exception. */
     public static void fireJoin() {
         selfTestModsScreen();
+        selfTestRejoin();
         try {
             Object invoker = net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.JOIN.invoker();
             if (invoker != null) ((net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.Join) invoker)

@@ -116,6 +116,20 @@ public final class FabricModHost {
     private static final Map<String, Mod> MODS = new ConcurrentHashMap<>();
     /** classes -> mod (dispatch des entrypoints) */
     private static final Map<String, Mod> BY_CLASS = new ConcurrentHashMap<>();
+    /**
+     * M7-X3 : instances d'entrypoints CONSTRUITES dans cette JVM (FQCN -> instance
+     * forte). Un mod Fabric est un singleton de facto (HudMod.INSTANCE,
+     * XaeroLib.INSTANCE…) : re-APPELER newInstance() écrase le champ statique avec
+     * un objet à moitié construit (le super-ctor publie this PUIS jette
+     * IllegalStateException sur détection de doublon) -> NPE à chaque tick
+     * (crash xaerominimap 18:24 : xaeroHudFabric jamais assigné sur l'instance B).
+     * uninstallAll() vide la sandbox mais les classes restent chargées et leurs
+     * statics vivants : au re-join on RE-RUN l'init (onInitializeClient) sur
+     * l'instance conservée — jamais le constructeur. Les mods avalent leur
+     * propre double-init (catch Throwable -> firstStageError, cf. bytecode
+     * XaeroMinimapFabric.onInitializeClient).
+     */
+    private static final java.util.concurrent.ConcurrentHashMap<String, Object> ENTRYPOINT_INSTANCES = new java.util.concurrent.ConcurrentHashMap<>();
 
     private static final class Mod {
         final String id;
@@ -620,12 +634,20 @@ public final class FabricModHost {
         for (String name : names) {
             try {
                 Class<?> c = mod.loader.loadClass(name);
-                Object o = c.getDeclaredConstructor().newInstance();
+                // M7-X3 : jamais re-construire — re-run l'init sur l'instance conservée.
+                // Le 2e newInstance() jette APRÈS avoir écrasé le singleton statique
+                // du mod (objet à moitié construit) -> NPE à chaque tick.
+                final boolean[] fresh = {false};
+                Object o = ENTRYPOINT_INSTANCES.computeIfAbsent(name, n -> {
+                    fresh[0] = true;
+                    try { return c.getDeclaredConstructor().newInstance(); }
+                    catch (Throwable t) { throw new RuntimeException(t); }
+                });
                 if (!type.isInstance(o)) {
                     IriumAgent.log("[fabric-mod] entrypoint " + key + " " + name + " n'implémente pas " + type.getSimpleName());
                     continue;
                 }
-                IriumAgent.log("[fabric-mod] entrypoint " + key + ": " + name);
+                IriumAgent.log("[fabric-mod] entrypoint " + key + ": " + name + (fresh[0] ? "" : " (instance conservée)"));
                 @SuppressWarnings("unchecked")
                 T t = (T) o;
                 init.run(t);
@@ -654,7 +676,13 @@ public final class FabricModHost {
             for (String n : names) {
                 try {
                     Class<?> c = m.loader.loadClass(n);
-                    Object o = c.getDeclaredConstructor().newInstance();
+                    // M7-X3 : instance unique par FQCN — getEntrypoints est appelé
+                    // à chaque ouverture d'écran (Mod Menu -> "modmenu") : un
+                    // newInstance() par appel écraserait le singleton du mod.
+                    Object o = ENTRYPOINT_INSTANCES.computeIfAbsent(n, k -> {
+                        try { return c.getDeclaredConstructor().newInstance(); }
+                        catch (Throwable t) { throw new RuntimeException(t); }
+                    });
                     if (type.isInstance(o)) { @SuppressWarnings("unchecked") T t = (T) o; out.add(t); }
                 } catch (Throwable ignored) {}
             }
