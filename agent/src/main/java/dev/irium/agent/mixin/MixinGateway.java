@@ -80,6 +80,53 @@ public final class MixinGateway {
     }
 
     /**
+     * M7-B11 : l'attach a-t-il eu lieu AVANT la définition des classes MC ?
+     * Si une classe net.minecraft.* est déjà chargée, les mixins des mods ne
+     * peuvent plus s'appliquer "à la définition" pour les cibles précoces
+     * (Minecraft, Keyboard, PackRepository) -> il faut la relance premain.
+     */
+    public static boolean anyMinecraftClassLoaded() {
+        try {
+            if (instrumentation == null) return true; // pas d'inst = pas de mixins, prudent
+            for (Class<?> c : instrumentation.getAllLoadedClasses()) {
+                String n = c.getName();
+                // M7-B12 : net.minecraft.client.main.Main est TOUJOURS chargée avant
+                // tout attach (c'est la classe de départ du process) — l'ignorer.
+                // Le verdict "précoce" reste correct : Minecraft, Keyboard, Player...
+                // ne se définissent qu'après, pendant le bootstrap du jeu.
+                if (n.startsWith("net.minecraft.client.main.")) continue;
+                if (n.startsWith("net.minecraft.client.") || n.startsWith("net.minecraft.server.")) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Throwable t) {
+            return true; // en cas de doute : considérer tardif (relance = sûr)
+        }
+    }
+
+    /**
+     * M7-B12 : UNE de ces classes (formes pointées) est-elle déjà définie ?
+     * Critère exact du verdict course : si une cible de mixin est déjà chargée,
+     * ses mixins ne pourront PAS s'appliquer à la définition -> relance.
+     */
+    public static boolean anyOfClassLoaded(java.util.Set<String> dottedNames) {
+        try {
+            if (instrumentation == null) return true;
+            java.util.Set<String> loaded = new java.util.HashSet<>();
+            for (Class<?> c : instrumentation.getAllLoadedClasses()) {
+                loaded.add(c.getName());
+            }
+            for (String n : dottedNames) {
+                if (loaded.contains(n)) return true;
+            }
+            return false;
+        } catch (Throwable t) {
+            return true; // doute -> tardif (relance = sûr)
+        }
+    }
+
+    /**
      * Racine M7-B4-5 : les mixins injectent des INTERFACES DU MOD dans des classes MC
      * (PackRepository doit implémenter IPackRepository du mod). La classe MC vit dans
      * le loader APP, l'interface dans le ModClassLoader -> NoClassDefFoundError au cast.
@@ -127,8 +174,16 @@ public final class MixinGateway {
     }
 
     static byte[] transform(String name, byte[] bytes) {
+        // M7-B11 : ne transformer QUE les classes Minecraft. Un transformer JVMTI
+        // global voit TOUT (java.io.*, classes des mods...) et le MixinTransformer
+        // n'est pas fait pour : java/* déclenche des chargements en cascade
+        // (ClassCircularityError au premain), et les classes des mods chargées
+        // pendant addConfig (ex. le MixinPlugin custom de Xaero) re-enter le
+        // runtime non-thread-safe -> ClassCircularityError -> config morte.
+        if (name == null || bytes == null) return null;
+        if (!(name.startsWith("net/minecraft/") || name.startsWith("com/mojang/"))) return null;
         IMixinTransformer t = lazyTransformer();
-        if (t == null || bytes == null) return null;
+        if (t == null) return null;
         String dotted = name.replace('/', '.');
         try {
             byte[] out = t.transformClassBytes(name, dotted, bytes);

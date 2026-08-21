@@ -5,7 +5,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>dev.irium</groupId>
   <artifactId>irium-agent</artifactId>
-  <version>0.6.3</version>
+  <version>0.6.18</version>
   <packaging>jar</packaging>
   <name>Irium Agent</name>
 
@@ -96,11 +96,12 @@
             <configuration>
               <createDependencyReducedPom>false</createDependencyReducedPom>
               <relocations>
-                <!-- ASM relocalisé : le host peut charger sa propre version d'ASM (mods) -->
-                <relocation>
-                  <pattern>org.objectweb.asm</pattern>
-                  <shadedPattern>dev.irium.shaded.asm</shadedPattern>
-                </relocation>
+                <!-- M7-B11 : ASM NON relocalisé (retour arrière). MixinExtras — fourni
+                     par l'agent, NON relocalisé car les mixins des mods référencent
+                     com.llamalad7 en dur — parse le bytecode avec org.objectweb.asm BRUT
+                     au PreApply. Relocaliser ASM -> NoClassDefFoundError -> tous les
+                     mixins MixinExtras meurent (Xaero). Le client vanilla 26.2
+                     n'embarque AUCUN ASM (vérifié) -> aucun conflit possible. -->
                 <!-- PIÈGE M7-B4 : NE PAS relocaliser org.spongepowered ! Les classes mixin
                      des mods externes portent l'annotation Lorg/spongepowered/asm/mixin/Mixin;
                      (descriptor ORIGINAL). Un runtime relocalisé cherche son propre descriptor
@@ -134,7 +135,7 @@
               <Agent-Class>dev.irium.agent.IriumAgent</Agent-Class>
               <Can-Redefine-Classes>true</Can-Redefine-Classes>
               <Can-Retransform-Classes>true</Can-Retransform-Classes>
-              <Irium-Version>0.6.3</Irium-Version>
+              <Irium-Version>0.6.18</Irium-Version>
             </manifestEntries>
           </archive>
         </configuration>

@@ -3,7 +3,11 @@
   "package": "dev.irium.agent.mixin.mc",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "PackRepositoryMixin"
+    "PackRepositoryMixin",
+    "GuiRendererMixin",
+    "MappedRegistryMixin",
+    "MinecraftReadyMixin",
+    "ScreenInitMixin"
   ],
   "injectors": {
     "defaultRequire": 1

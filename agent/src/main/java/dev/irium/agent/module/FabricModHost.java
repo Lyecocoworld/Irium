@@ -48,6 +48,10 @@ public final class FabricModHost {
         final ModClassLoader loader;
         /** jar matérialisé sur disque (classpath APP) — M7-B9 pour getRootPaths. */
         volatile java.nio.file.Path jarPath;
+        /** M7-B11 : sous-mods JiJ (ex. xaerolib) — entrypoints lancés avant le nôtre. */
+        volatile List<Mod> jij;
+        /** M7-B12 : vrai si ce Mod est un sous-mod JiJ (activé via son parent, jamais en boucle directe). */
+        boolean isJij;
         Mod(String id, ModJarMeta meta, ModClassLoader loader) { this.id = id; this.meta = meta; this.loader = loader; }
     }
 
@@ -67,6 +71,8 @@ public final class FabricModHost {
     static final Map<String, String> ARMED = new ConcurrentHashMap<>();
     /** Vrai si ce boot a ete arme par Irium (arg boot: OU attach avec cache). */
     static volatile boolean bootedByIrium;
+    /** M7-B12 : activation précoce déjà faite (fin ctor Minecraft). */
+    static volatile boolean earlyActivated;
     /** host:port arme pour ce boot (si bootedByIrium). */
     static volatile String armedServer;
     /** Dernier MODSET reçu par serveur : host -> (clé jar -> sha256hex). */
@@ -100,11 +106,24 @@ public final class FabricModHost {
      * relance auto en fallback.
      */
     public static void armFromCache() {
+        // M7-B12 : verrou = même moniteur que install() — le ctor Minecraft peut
+        // terminer PENDANT l'armement (thread render vs thread attach) et
+        // onMinecraftReady() doit voir un état cohérent (tout ou rien).
+        synchronized (FabricModHost.class) {
         int armed = 0;
         try {
             java.nio.file.Path root = java.nio.file.Path.of(
                     System.getProperty("user.home"), ".irium", "servers");
             if (!java.nio.file.Files.exists(root)) return;
+            // M7-B12 : verdict course AVANT la boucle (les classes MC se chargent
+            // pendant l'armement — mesurer à l'entrée, pas à la fin). Critère : une
+            // CIBLE DE MIXIN est-elle déjà chargée ? (pas "une classe MC quelconque"
+            // — net.minecraft.client.User/Main se chargent avant le ctor Minecraft,
+            // faussant le verdict). Si une cible est chargée, ses mixins ne peuvent
+            // plus s'appliquer -> relance MODSET nécessaire.
+            java.util.Set<String> mixinTargets = collectMixinTargetsOfCachedJars(root);
+            boolean early = mixinTargets.isEmpty()
+                    || !dev.irium.agent.mixin.MixinGateway.anyOfClassLoaded(mixinTargets);
             try (var stream = java.nio.file.Files.list(root)) {
                 for (java.nio.file.Path dir : (Iterable<java.nio.file.Path>) stream::iterator) {
                     if (!java.nio.file.Files.isDirectory(dir)) continue;
@@ -116,7 +135,7 @@ public final class FabricModHost {
                                 byte[] bytes = java.nio.file.Files.readAllBytes(jar);
                                 ModJarMeta meta = metaOfJar(bytes);
                                 if (meta == null || meta.id == null) continue;
-                                installInternal(bytes, true);
+                                installInternalLocked(bytes, true);
                                 ARMED.put(key, sha256Hex(bytes));
                                 armed++;
                             } catch (Throwable t) {
@@ -127,12 +146,21 @@ public final class FabricModHost {
                 }
             }
             if (armed > 0) {
-                bootedByIrium = true; // ce boot est armé -> MODSET match -> pas de relance
+                // M7-B11 : ne marquer "armé pour ce boot" QUE si l'attach a gagné
+                // la course (aucune classe MC définie). Sinon les mixins des mods ne
+                // peuvent PAS s'appliquer aux classes déjà chargées (Minecraft,
+                // Keyboard, PackRepository...) et le MODSET doit déclencher la
+                // relance premain — sinon SVC/Xaero tournent sans leurs mixins
+                // (CCE IPackRepository, minimap muette...).
+                bootedByIrium = early;
                 IriumAgent.log("[attach-arm] " + armed + " mod(s) armé(s) depuis le cache "
-                        + "(transform à la définition)");
+                        + (bootedByIrium
+                            ? "(attach précoce, transform à la définition)"
+                            : "(attach TARDIF — classes MC déjà chargées, relance MODSET requise)"));
             }
         } catch (Throwable t) {
             IriumAgent.log("[attach-arm] impossible: " + t);
+        }
         }
     }
 
@@ -209,6 +237,34 @@ public final class FabricModHost {
         }
     }
 
+    /**
+     * M7-B12 : collecte les cibles @Mixin de TOUS les jars du cache (sous-mods
+     * JiJ inclus). Sert au verdict de course attach : si une cible est déjà
+     * chargée au moment de l'attach, les mixins ne s'appliqueront pas -> relance.
+     */
+    private static java.util.Set<String> collectMixinTargetsOfCachedJars(java.nio.file.Path root) {
+        java.util.Set<String> targets = new java.util.HashSet<>();
+        try {
+            try (var servers = java.nio.file.Files.list(root)) {
+                for (java.nio.file.Path dir : (Iterable<java.nio.file.Path>) servers::iterator) {
+                    if (!java.nio.file.Files.isDirectory(dir)) continue;
+                    try (var jars = java.nio.file.Files.list(dir)) {
+                        for (java.nio.file.Path jar : (Iterable<java.nio.file.Path>) jars::iterator) {
+                            if (!jar.toString().endsWith(".jar")) continue;
+                            try {
+                                for (Map.Entry<String, byte[]> e : unzip(java.nio.file.Files.readAllBytes(jar)).entrySet()) {
+                                    if (!e.getKey().endsWith(".class")) continue;
+                                    targets.addAll(dev.irium.agent.mixin.MixinTargetScanner.scan(e.getValue()));
+                                }
+                            } catch (Throwable ignored) {}
+                        }
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+        return targets;
+    }
+
     /** Parse fabric.mod.json depuis un jar (null si absent/invalide). */
     static ModJarMeta metaOfJar(byte[] jarBytes) {
         try {
@@ -250,6 +306,11 @@ public final class FabricModHost {
         }
     }
 
+    /** M7-B12 : corps d'installation sous moniteur (appelé avec le verrou déjà tenu). */
+    private static void installInternalLocked(byte[] modJarBytes, boolean early) throws Exception {
+        installInternal(modJarBytes, early);
+    }
+
     private static void installInternal(byte[] modJarBytes, boolean early) throws Exception {
         // FabricLoader.INSTANCE cote client (avant tout code du mod)
         if (net.fabricmc.loader.impl.FabricLoaderImpl.INSTANCE == null) {
@@ -274,11 +335,27 @@ public final class FabricModHost {
             // mixins/configs sont déjà en place depuis le premain)
             Mod existing = MODS.get(meta.id);
             IriumAgent.log("[fabric-mod] mod '" + meta.id + "' déjà armé -> activation entrypoints");
-            runEntrypoint(existing, "main", net.fabricmc.api.ModInitializer.class, mi -> mi.onInitialize());
-            runEntrypoint(existing, "client", net.fabricmc.api.ClientModInitializer.class, ci -> ci.onInitializeClient());
-            if (dev.irium.agent.IriumTap.currentChannel() != null) {
-                dev.irium.agent.IriumTap.fireJoinLate();
-            }
+            onRenderThread(() -> {
+                // M7-B12 : si l'activation précoce (fin ctor Minecraft) a déjà eu
+                // lieu, les entrypoints ont tourné -> ne PAS double-exécuter
+                // (Xaero/SVC recréeraient leurs instances -> état cassé).
+                if (earlyActivated) {
+                    IriumAgent.log("[fabric-mod] précoce déjà faite -> join simple (pas de ré-activation)");
+                    if (dev.irium.agent.IriumTap.currentChannel() != null) {
+                        dev.irium.agent.IriumTap.fireJoinLate();
+                    }
+                    return;
+                }
+                // JiJ d'abord (dépendances), puis le parent
+                for (Mod sub : jijModsOf(existing)) {
+                    runEntrypoint(sub, "client", net.fabricmc.api.ClientModInitializer.class, ci -> ci.onInitializeClient());
+                }
+                runEntrypoint(existing, "main", net.fabricmc.api.ModInitializer.class, mi -> mi.onInitialize());
+                runEntrypoint(existing, "client", net.fabricmc.api.ClientModInitializer.class, ci -> ci.onInitializeClient());
+                if (dev.irium.agent.IriumTap.currentChannel() != null) {
+                    dev.irium.agent.IriumTap.fireJoinLate();
+                }
+            });
             return;
         }
 
@@ -289,6 +366,33 @@ public final class FabricModHost {
         MixinGateway.appendModToSystemClassPath(modJar);
         Mod mod = new Mod(meta.id, meta, loader);
         MODS.put(meta.id, mod);
+
+        // M7-B11 : sous-mods JiJ (ex. xaerolib) — VRAIS mods avec entrypoints et
+        // mixins propres. Sur vraie Fabric le loader les découvre et les initialise
+        // AVANT leur parent (dépendance). Sans ça : XaeroLib.INSTANCE null ->
+        // NPE dans CustomRenderTypes.applyFixedOrder (Stage 2/3).
+        List<Mod> jijMods = new ArrayList<>();
+        for (String k : entries.keySet()) {
+            if (!k.startsWith("irium-jij/fabric.mod.json")) continue;
+            try {
+                ModJarMeta jm = GSON.fromJson(
+                        new String(entries.get(k), StandardCharsets.UTF_8), ModJarMeta.class);
+                if (jm == null || jm.id == null || jm.id.isBlank() || MODS.containsKey(jm.id)) continue;
+                // le JiJ partage le classloader du parent (classes déjà fusionnées)
+                Mod sub = new Mod(jm.id, jm, loader);
+                sub.isJij = true;
+                MODS.put(jm.id, sub);
+                jijMods.add(sub);
+                if (jm.mixins != null) {
+                    for (String cfg : jm.mixins) MixinGateway.addConfig(cfg);
+                }
+                IriumAgent.log("[fabric-mod] JiJ '" + jm.id + "' v" + jm.version + " installé (sous-mod de " + meta.id + ")");
+            } catch (Throwable t) {
+                IriumAgent.log("[fabric-mod] JiJ " + k + " échec: " + t);
+            }
+        }
+        mod.jij = jijMods;
+        for (Mod sub : jijMods) sub.jarPath = modJar; // getOrigin() du JiJ = jar fusionné
 
         // M7-B9 : assets (lang/textures) servis comme resource pack built-in
         IriumPackSource.register(meta.id, entries);
@@ -329,14 +433,19 @@ public final class FabricModHost {
         IriumAgent.log("[fabric-mod] '" + meta.id + "' v" + meta.version + " installe ("
                 + entries.size() + " entrees, " + countClasses(entries) + " classes)");
 
-        // entrypoints : d'abord main, puis client
-        runEntrypoint(mod, "main", net.fabricmc.api.ModInitializer.class, mi -> mi.onInitialize());
-        runEntrypoint(mod, "client", net.fabricmc.api.ClientModInitializer.class, ci -> ci.onInitializeClient());
-
-        // le mod arrive APRES le PLAY : re-fire JOIN pour ses receivers
-        if (dev.irium.agent.IriumTap.currentChannel() != null) {
-            dev.irium.agent.IriumTap.fireJoinLate();
-        }
+        // entrypoints : d'abord main, puis client ; JOIN ensuite (même task render,
+        // APRÈS init — sinon les receivers du mod ratent le join déjà passé)
+        onRenderThread(() -> {
+            // JiJ d'abord (dépendances), puis le parent
+            for (Mod sub : jijMods) {
+                runEntrypoint(sub, "client", net.fabricmc.api.ClientModInitializer.class, ci -> ci.onInitializeClient());
+            }
+            runEntrypoint(mod, "main", net.fabricmc.api.ModInitializer.class, mi -> mi.onInitialize());
+            runEntrypoint(mod, "client", net.fabricmc.api.ClientModInitializer.class, ci -> ci.onInitializeClient());
+            if (dev.irium.agent.IriumTap.currentChannel() != null) {
+                dev.irium.agent.IriumTap.fireJoinLate();
+            }
+        });
 
         // M7-B9 : install à chaud -> les resource packs doivent recharger pour
         // voir les assets du mod (lang, textures). Sur le render thread.
@@ -344,6 +453,68 @@ public final class FabricModHost {
     }
 
     private interface Init<T> { void run(T t); }
+
+    /** M7-B11 : sous-mods JiJ d'un mod parent (activation au join, avant le parent). */
+    private static List<Mod> jijModsOf(Mod parent) {
+        return parent.jij == null ? java.util.Collections.emptyList() : parent.jij;
+    }
+
+    /**
+     * M7-B11 : exécute r sur le thread RENDER (sémantique Fabric). Sur vraie
+     * Fabric les entrypoints tournent sur le thread principal AVANT le premier
+     * tick ; chez nous ils sont déclenchés au join depuis le thread Netty ->
+     * course avec les mixins tick (Xaero : HudMod.INSTANCE publié par le
+     * super-ctor pendant que le render thread l'utilise déjà). Minecraft.execute
+     * sérialise avec les ticks ; si le render thread est déjà le courant, run direct.
+     */
+    private static void onRenderThread(Runnable r) {
+        try {
+            Class<?> mc = Class.forName("net.minecraft.client.Minecraft");
+            Object inst = mc.getMethod("getInstance").invoke(null);
+            // isSameThread() : vrai si le thread courant EST le thread jeu (render/main)
+            boolean same = (Boolean) mc.getMethod("isSameThread").invoke(inst);
+            if (same) { r.run(); return; }
+            // execute() : BlockableEventLoop — sérialise avec les ticks
+            mc.getMethod("execute", Runnable.class).invoke(inst, r);
+        } catch (Throwable t) {
+            IriumAgent.log("[fabric-mod] bascule render thread échec (" + t + ") -> exécution directe");
+            r.run();
+        }
+    }
+
+    /**
+     * M7-B12 : appelé par MinecraftReadyMixin à la fin du ctor Minecraft.
+     * Les mods armés (boot/attach précoce) ont leurs mixins vivants depuis la
+     * définition des classes, mais leurs entrypoints n'ont pas tourné — certains
+     * handlers les supposent initialisés (xaerolib : XaeroLib.INSTANCE dans
+     * Player.onTickHead). On active tout ICI : instance Minecraft présente,
+     * aucun monde/tick/join encore possible. Idempotent, une fois par boot.
+     */
+    public static void onMinecraftReady() {
+        // M7-B12 : le verrou sérialise avec armFromCache()/install() — si le ctor
+        // Minecraft finit PENDANT l'armement, on attend sa fin ici (état complet).
+        synchronized (FabricModHost.class) {
+            if (!bootedByIrium) return; // pas d'armement boot -> rien à activer tôt
+            if (earlyActivated) return;
+            earlyActivated = true;
+        }
+        IriumAgent.log("[fabric-mod] activation précoce (fin ctor Minecraft) : " + MODS.size() + " mod(s)");
+        // Boucle UNIQUE dans l'ordre correct : JiJ (dépendances) AVANT leur parent,
+        // parent par parent. Les JiJ sont aussi dans MODS (surface FabricLoader)
+        // mais ne doivent PAS être re-activés en boucle directe (duplicate
+        // config channel xaerolib:main -> XaeroLib.INSTANCE cassé -> NPE cascade).
+        List<Mod> ordered = new ArrayList<>();
+        for (Mod mod : MODS.values()) {
+            if (mod.isJij) continue; // les JiJ sont activés via leur parent ci-dessous
+            for (Mod sub : jijModsOf(mod)) ordered.add(sub);
+            ordered.add(mod);
+        }
+        for (Mod m : ordered) {
+            runEntrypoint(m, "main", net.fabricmc.api.ModInitializer.class, mi -> mi.onInitialize());
+            runEntrypoint(m, "client", net.fabricmc.api.ClientModInitializer.class, ci -> ci.onInitializeClient());
+        }
+        IriumAgent.log("[fabric-mod] activation précoce terminée");
+    }
 
     private static <T> void runEntrypoint(Mod mod, String key, Class<T> type, Init<T> init) {
         List<String> names = mod.meta.entrypoints == null ? null : mod.meta.entrypoints.get(key);
@@ -414,15 +585,24 @@ public final class FabricModHost {
                 java.nio.file.Path jp = m.jarPath;
                 return jp != null ? List.of(jp) : List.of(Path.of("."));
             }
-            @Override public net.fabricmc.loader.api.metadata.ModOrigin getOrigin() { return ModOriginIRIUM.INSTANCE; }
+            @Override public net.fabricmc.loader.api.metadata.ModOrigin getOrigin() {
+                // M7-B11 : Xaero lit getOrigin().getPaths().get(0).getFileName()
+                // (PlatformContextFabric) pour placer ses dossiers de config ->
+                // retourner le VRAI jar matérialisé, pas une liste vide.
+                java.nio.file.Path jp = m.jarPath;
+                if (jp == null) return ModOriginIRIUM.INSTANCE;
+                return new ModOriginIRIUM(jp);
+            }
         });
     }
 
-    /** ModOrigin constant (Kind.OTHER, aucun chemin). */
+    /** ModOrigin Irium — pointe le jar matérialisé du mod streamé. */
     static final class ModOriginIRIUM implements net.fabricmc.loader.api.metadata.ModOrigin {
-        static final ModOriginIRIUM INSTANCE = new ModOriginIRIUM();
-        @Override public Kind getKind() { return Kind.UNKNOWN; }
-        @Override public List<Path> getPaths() { return List.of(); }
+        static final ModOriginIRIUM INSTANCE = new ModOriginIRIUM(null);
+        private final java.nio.file.Path jar;
+        ModOriginIRIUM(java.nio.file.Path jar) { this.jar = jar; }
+        @Override public Kind getKind() { return jar != null ? Kind.PATH : Kind.UNKNOWN; }
+        @Override public List<Path> getPaths() { return jar != null ? List.of(jar) : List.of(); }
         @Override public String getParentModId() { return ""; }
         @Override public String getParentSubLocation() { return ""; }
     }
@@ -458,10 +638,12 @@ public final class FabricModHost {
 
     public static Path configDir() {
         try {
-            Path p = Path.of("irium-config");
+            // M7-B11 : ABSOLU obligatoire — Xaero fait configDir.getParent().resolve(...)
+            // (HudMod.loadClient) ; un chemin relatif -> getParent() null -> NPE.
+            Path p = Path.of("irium-config").toAbsolutePath().normalize();
             Files.createDirectories(p);
             return p;
-        } catch (Throwable t) { return Path.of("."); }
+        } catch (Throwable t) { return Path.of(".").toAbsolutePath(); }
     }
 
     /* ---------------- payloads ---------------- */
@@ -494,11 +676,14 @@ public final class FabricModHost {
                 if (e.isDirectory()) continue;
                 byte[] b = zin.readAllBytes();
                 out.put(e.getName(), b);
-                // JiJ : jars imbriqués -> fusionnés (les modules fabric-* sont couverts
-                // par la surface Irium, on ne fusionne que le reste, ex. voicechat-api)
-                if (e.getName().startsWith("META-INF/jars/") && e.getName().endsWith(".jar")
-                        && !e.getName().contains("fabric-")) {
-                    nested.add(b);
+                // JiJ : jars imbriqués -> fusionnés (les modules fabric-* de fabric-api
+                // sont couverts par la surface Irium, on ne fusionne que le reste, ex.
+                // voicechat-api, xaerolib-fabric-*. NB: startsWith sur le BASENAME —
+                // "xaerolib-fabric-26.2.jar" contient "fabric-" mais ne fait PAS
+                // partie de fabric-api, il doit être fusionné.)
+                if (e.getName().startsWith("META-INF/jars/") && e.getName().endsWith(".jar")) {
+                    String base = e.getName().substring(e.getName().lastIndexOf('/') + 1);
+                    if (!base.startsWith("fabric-")) nested.add(b);
                 }
             }
         }
@@ -508,7 +693,16 @@ public final class FabricModHost {
                 while ((e = zin.getNextEntry()) != null) {
                     if (e.isDirectory()) continue;
                     String n2 = e.getName();
-                    if (n2.equals("fabric.mod.json") || n2.startsWith("META-INF/services/")) continue;
+                    // NB: META-INF/services/ des JiJ sont conservés (putIfAbsent) —
+                    // xaerolib résout ses helpers platform via ServiceLoader.
+                    if (n2.equals("fabric.mod.json")) {
+                        // M7-B11 : métas JiJ conservées sous clé préfixée — le JiJ est
+                        // un VRAI mod (entrypoints + mixins propres, ex. xaerolib pose
+                        // XaeroLib.INSTANCE dans son entrypoint client) et doit être
+                        // installé comme sous-mod AVANT son parent.
+                        out.putIfAbsent("irium-jij/" + n2, zin.readAllBytes());
+                        continue;
+                    }
                     out.putIfAbsent(n2, zin.readAllBytes());
                 }
             }

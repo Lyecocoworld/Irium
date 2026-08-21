@@ -58,7 +58,7 @@ public final class FabricLoaderClient implements FabricLoader {
         catch (Throwable t) { return null; }
     }
 
-    @Override public Path getGameDir() { return Path.of("."); }
+    @Override public Path getGameDir() { return Path.of(".").toAbsolutePath().normalize(); }
 
     @Override public Path getConfigDir() { return FabricModHost.configDir(); }
 

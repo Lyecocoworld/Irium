@@ -2,18 +2,24 @@ package dev.irium.agent.input;
 
 import net.minecraft.client.KeyMapping;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Touches des mods streamés : cumulées ici, injectées dans les options
- * vanilla (KeyMapping[] options.keyMappings) à la prochaine ouverture des
- * réglages — jamais de crash si la reflexion échoue (touches fonctionnent
- * via KeyboardHook, juste absentes du menu).
+ * Touches des mods streamés : cumulées ici, fusionnées dans le tableau
+ * vanilla (Options.keyMappings) à CHAQUE enregistrement — de façon
+ * ADDITIVE (seulement les touches pas déjà présentes).
+ *
+ * M7-B12 fix : l'ancienne logique "une seule injection" faisait que le
+ * premier mod activé (SVC -> PTT) verrouillait le tableau — les touches
+ * des mods suivants (Xaero : 10+) n'étaient jamais fusionnées. Symptôme
+ * réel : seul le PTT visible dans le menu Controls.
  */
 public final class ClientKeyBindings {
 
     private static final List<KeyMapping> MOD_KEYS = new ArrayList<>();
+    private static Field cachedField;
 
     private ClientKeyBindings() {}
 
@@ -27,23 +33,38 @@ public final class ClientKeyBindings {
         return MOD_KEYS.contains(mapping);
     }
 
-    /** Tente d'injecter les touches dans options.keyMappings (reflexion sûre). */
+    /**
+     * Fusion additive : ajoute au tableau vanilla uniquement les touches
+     * mod absentes. Appelé à chaque register() — idempotent.
+     */
     private static synchronized void inject() {
         try {
             net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
             if (mc == null || mc.options == null) return;
-            java.lang.reflect.Field f = mc.options.getClass().getField("keyMappings");
-            f.setAccessible(true);
-            KeyMapping[] current = (KeyMapping[]) f.get(mc.options);
-            for (KeyMapping k : current) {
-                if (MOD_KEYS.contains(k)) return; // déjà injecté
+            if (cachedField == null) {
+                cachedField = mc.options.getClass().getField("keyMappings");
+                cachedField.setAccessible(true);
             }
-            KeyMapping[] merged = new KeyMapping[current.length + MOD_KEYS.size()];
+            KeyMapping[] current = (KeyMapping[]) cachedField.get(mc.options);
+            List<KeyMapping> toAdd = new ArrayList<>();
+            for (KeyMapping k : MOD_KEYS) {
+                boolean present = false;
+                for (KeyMapping c : current) {
+                    if (c == k) { present = true; break; }
+                }
+                if (!present) toAdd.add(k);
+            }
+            if (toAdd.isEmpty()) return;
+            KeyMapping[] merged = new KeyMapping[current.length + toAdd.size()];
             System.arraycopy(current, 0, merged, 0, current.length);
-            for (int i = 0; i < MOD_KEYS.size(); i++) merged[current.length + i] = MOD_KEYS.get(i);
-            f.set(mc.options, merged);
+            for (int i = 0; i < toAdd.size(); i++) merged[current.length + i] = toAdd.get(i);
+            cachedField.set(mc.options, merged);
+            dev.irium.agent.SafeLog.offer("[fabric-keys] " + merged.length
+                    + " touches au total (+" + toAdd.size() + " mods)");
         } catch (Throwable t) {
-            // champs renommés/privés : les touches restent locales au mod
+            // champ renommé/privé : les touches restent fonctionnelles (KeyboardHook),
+            // juste absentes du menu visuel
+            dev.irium.agent.SafeLog.offer("[fabric-keys] injection options échec: " + t);
         }
     }
 
