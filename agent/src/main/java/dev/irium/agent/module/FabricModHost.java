@@ -67,6 +67,14 @@ public final class FabricModHost {
         public Map<String, Object> custom;
         /** icon du fabric.mod.json : String ("icon.png") ou Map{"16":"a.png","32":"b.png"}. */
         public Object icon;
+        /** M7-B11d : surface descriptive lue par Mod Menu (liste + description). */
+        public String name;
+        public String description;
+        /** String ("Author") ou liste ["A","B"]. */
+        public Object authors;
+        public Object license;
+        /** {"homepage":"...","sources":"...","issues":"..."} */
+        public Map<String, Object> contact;
     }
 
     /* ---------------- M7-B6 : cache par serveur + armement au boot ---------------- */
@@ -682,8 +690,49 @@ public final class FabricModHost {
                     @Override public int compareTo(net.fabricmc.loader.api.Version o) { return 0; }
                 };
             }
-            @Override public String getName() { return m.id; }
+            @Override public String getName() { return m.meta.name != null ? m.meta.name : m.id; }
             @Override public String getType() { return "fabric"; }
+            /** M7-B11d : description réelle du fabric.mod.json (Mod Menu). */
+            @Override public String getDescription() {
+                return m.meta.description == null ? "" : m.meta.description;
+            }
+            /** M7-B11d : authors (String ou List dans le fmj). */
+            @Override public java.util.Collection<net.fabricmc.loader.api.metadata.Person> getAuthors() {
+                java.util.List<net.fabricmc.loader.api.metadata.Person> out = new java.util.ArrayList<>();
+                Object a = m.meta.authors;
+                if (a instanceof String s) {
+                    out.add(person(s));
+                } else if (a instanceof List<?> l) {
+                    for (Object o : l) if (o instanceof String s) out.add(person(s));
+                }
+                return out;
+            }
+            /** M7-B11d : licence ("MIT", "All Rights Reserved"...). */
+            @Override public java.util.Collection<String> getLicense() {
+                Object lic = m.meta.license;
+                if (lic instanceof String s) return java.util.List.of(s);
+                if (lic instanceof List<?> l) {
+                    java.util.List<String> out = new java.util.ArrayList<>();
+                    for (Object o : l) if (o instanceof String s) out.add(s);
+                    return out;
+                }
+                return java.util.List.of();
+            }
+            /** M7-B11d : contacts réels (liens Source/Homepage de la description). */
+            @Override public net.fabricmc.loader.api.metadata.ContactInformation getContact() {
+                Map<String, Object> c = m.meta.contact;
+                if (c == null || c.isEmpty()) return net.fabricmc.loader.api.metadata.ModMetadata.super.getContact();
+                java.util.Map<String, String> flat = new java.util.HashMap<>();
+                for (Map.Entry<String, Object> e : c.entrySet()) {
+                    if (e.getValue() instanceof String s) flat.put(e.getKey(), s);
+                }
+                return new net.fabricmc.loader.api.metadata.ContactInformation() {
+                    @Override public java.util.Optional<String> get(String key) {
+                        return java.util.Optional.ofNullable(flat.get(key));
+                    }
+                    @Override public java.util.Map<String, String> asMap() { return flat; }
+                };
+            }
             /** M7-B11 : Mod Menu lit l'icône (getIcon -> requireNonNull sinon crash). */
             @Override public java.util.Optional<String> getIconPath(int size) {
                 Object ic = m.meta.icon;
@@ -704,6 +753,14 @@ public final class FabricModHost {
                 }
                 return java.util.Optional.empty();
             }
+        };
+    }
+
+    /** M7-B11d : Person minimal (nom seul — le fmj peut avoir des authors objets,
+     *  on ne prend que les strings). */
+    private static net.fabricmc.loader.api.metadata.Person person(String name) {
+        return new net.fabricmc.loader.api.metadata.Person() {
+            @Override public String getName() { return name; }
         };
     }
 
