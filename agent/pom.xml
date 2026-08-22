@@ -5,7 +5,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>dev.irium</groupId>
   <artifactId>irium-agent</artifactId>
-  <version>0.6.32</version>
+  <version>0.7.0</version>
   <packaging>jar</packaging>
   <name>Irium Agent</name>
 
@@ -116,6 +116,34 @@
                     <exclude>org/spongepowered/tools/**</exclude>
                   </excludes>
                 </filter>
+                <!-- M7-X16 : les stubs net/fabricmc/fabric/api masquaient les VRAIS
+                     modules JiJ des mods (classpath agent = ajouté AVANT les jars mods,
+                     premier trouvé gagne). NoSuchMethodError ScreenEvents.beforeTick
+                     (02:14) : le mixin du JiJ screen-api appelait une méthode absente
+                     du stub. Les mods streamés apportent leurs modules fabric — on
+                     exclut les stubs couverts. GARDÉS : classes que l'agent appelle
+                     et qu'AUCUN mod du modset ne fournit (ServerPlayerEvents,
+                     ClientNetworkingImpl). Au runtime les JiJ fournissent tout. -->
+                <filter>
+                  <artifact>dev.irium:irium-agent</artifact>
+                  <excludes>
+                    <exclude>net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientTickEvents*.class</exclude>
+                    <exclude>net/fabricmc/fabric/api/client/keymapping/v1/KeyMappingHelper.class</exclude>
+                    <exclude>net/fabricmc/fabric/api/client/networking/v1/ClientPlayConnectionEvents*.class</exclude>
+                    <exclude>net/fabricmc/fabric/api/client/networking/v1/ClientPlayNetworking*.class</exclude>
+                    <exclude>net/fabricmc/fabric/api/client/rendering/v1/PictureInPictureRendererRegistry*.class</exclude>
+                    <exclude>net/fabricmc/fabric/api/client/rendering/v1/hud/*.class</exclude>
+                    <exclude>net/fabricmc/fabric/api/client/screen/v1/ScreenEvents*.class</exclude>
+                    <exclude>net/fabricmc/fabric/api/client/screen/v1/Screens.class</exclude>
+                    <exclude>net/fabricmc/fabric/api/command/v2/CommandRegistrationCallback*.class</exclude>
+                    <exclude>net/fabricmc/fabric/api/event/Event.class</exclude>
+                    <exclude>net/fabricmc/fabric/api/event/EventFactory*.class</exclude>
+                    <exclude>net/fabricmc/fabric/api/event/lifecycle/v1/ServerLifecycleEvents*.class</exclude>
+                    <exclude>net/fabricmc/fabric/api/networking/v1/PacketSender.class</exclude>
+                    <exclude>net/fabricmc/fabric/api/networking/v1/PayloadTypeRegistry*.class</exclude>
+                    <exclude>net/fabricmc/fabric/api/networking/v1/ServerPlayNetworking*.class</exclude>
+                  </excludes>
+                </filter>
               </filters>
               <transformers>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
@@ -135,7 +163,7 @@
               <Agent-Class>dev.irium.agent.IriumAgent</Agent-Class>
               <Can-Redefine-Classes>true</Can-Redefine-Classes>
               <Can-Retransform-Classes>true</Can-Retransform-Classes>
-              <Irium-Version>0.6.32</Irium-Version>
+              <Irium-Version>0.6.41</Irium-Version>
             </manifestEntries>
           </archive>
         </configuration>

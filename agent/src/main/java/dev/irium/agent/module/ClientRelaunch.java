@@ -113,6 +113,9 @@ public final class ClientRelaunch {
         return out;
     }
 
+    /** M7-X19 : expose stripServerArgs à VanillaExit (variante vanilla de la cmdline). */
+    static List<String> stripServerArgsPub(String[] toks) { return stripServerArgs(toks); }
+
     /** host:port du serveur courant via le tap netty (null si hors ligne). */
     static String currentServerHostPort() {
         try {

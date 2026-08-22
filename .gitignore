@@ -23,5 +23,15 @@ dependency-reduced-pom.xml
 # Lab / local
 lab/
 *.log
+*.log.gz
 harness/.work/
 harness/.lab/
+logs/
+irium-config/
+agent/logs/
+agent/irium-config/
+installer/XaeroWaypoints_BACKUP*/
+installer/config/
+installer/xaero/
+installer/irium-config/
+config/

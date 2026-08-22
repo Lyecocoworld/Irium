@@ -18,6 +18,9 @@ public abstract class ScreenInitMixin {
 
     @Inject(method = "init(II)V", at = @At("HEAD"))
     private void irium$beforeInit(CallbackInfo ci) {
+        // M7-X20 : surface gated — hors session Irium (titre, SP, autre
+        // serveur), le ScreenEvents ne tire PAS -> pas de bouton "Mods".
+        if (!dev.irium.agent.module.SessionGate.isActive()) return;
         try {
             Screen self = (Screen) (Object) this;
             Minecraft mc = Minecraft.getInstance();
@@ -32,6 +35,8 @@ public abstract class ScreenInitMixin {
 
     @Inject(method = "init(II)V", at = @At("RETURN"))
     private void irium$afterInit(CallbackInfo ci) {
+        // M7-X20 : surface gated (cf. beforeInit).
+        if (!dev.irium.agent.module.SessionGate.isActive()) return;
         try {
             Screen self = (Screen) (Object) this;
             Minecraft mc = Minecraft.getInstance();

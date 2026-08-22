@@ -175,6 +175,18 @@ public final class ModuleManager {
                 String host = IriumAgentLike.currentHost();
                 IriumAgentLike.log("[module] MODSET reçu: " + modset.keySet() + " (host=" + host + ")");
                 dev.irium.agent.module.FabricModHost.rememberModset(host, modset);
+                // M7-X20 : MODSET = preuve que ce serveur EST Irium -> ouvrir la
+                // porte de session (surfaces mods visibles : bouton Mods, PiP,
+                // dispatch réseau, fabric JOIN/DISCONNECT).
+                dev.irium.agent.module.SessionGate.begin();
+                // JOIN rétroactif : le JOIN a été suspendu (gate fermée au moment
+                // du PLAY) -> le tirer maintenant que la porte est ouverte.
+                try {
+                    java.util.concurrent.CompletableFuture.runAsync(() -> {
+                        dev.irium.agent.IriumTap.fireSuppressedJoin();
+                        dev.irium.agent.IriumTap.flushPendingPayloads();
+                    }).exceptionally(t -> null);
+                } catch (Throwable ignored) {}
                 if (host != null && !dev.irium.agent.module.FabricModHost.isArmedFor(modset)) {
                     IriumAgentLike.log("[module] set non armé dans ce boot -> relance auto vers " + host);
                     // attendre la fin du streaming des jars (ils arrivent après), la

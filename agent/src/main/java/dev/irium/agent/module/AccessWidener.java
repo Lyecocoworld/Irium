@@ -59,8 +59,13 @@ public final class AccessWidener {
             // member:   [accessible|extendable] [field|method] owner name [desc]
             if (p.length < 3) continue;
             boolean accessible;
-            if ("accessible".equals(p[0])) accessible = true;
-            else if ("extendable".equals(p[0])) accessible = false;
+            // M7-X18b : "transitive-accessible"/"transitive-extendable" (module
+            // fabric-transitive-access-wideners-v1) = mêmes effets d'accès que
+            // accessible/extendable pour nous (la transitivité aux mods dépendants
+            // est automatique : tous nos mods partagent le même loader APP).
+            // Ex: DebugScreenEntries.register (DebugOverlayClient 02:50).
+            if ("accessible".equals(p[0]) || "transitive-accessible".equals(p[0])) accessible = true;
+            else if ("extendable".equals(p[0]) || "transitive-extendable".equals(p[0])) accessible = false;
             else continue;
             boolean isClass = "class".equals(p[1]);
             boolean isField = "field".equals(p[1]);

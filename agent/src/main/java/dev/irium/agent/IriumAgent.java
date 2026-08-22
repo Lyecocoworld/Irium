@@ -38,9 +38,14 @@ public final class IriumAgent {
         boolean force = args != null && args.contains("force");
         // M7-B6 : boot:host:port -> armer les mods du cache serveur AVANT le boot MC
         boolean bootArm = args != null && args.startsWith("boot:");
+        // M7-X21 "Gateway" : premain d'une instance Irium-ée -> choix AVANT boot.
+        boolean gateway = args != null && args.contains("gateway");
+        // M7-X21 : automatisation (tests bot) : -Dirium.gateway.choice=
+        //   classic | full:host:port — court-circuite le dialog Swing.
+        String autoChoice = System.getProperty("irium.gateway.choice");
         try {
             HostDetection.Result host = HostDetection.detect();
-            log("[" + mode + "] irium-agent 0.3.0 bootstrapping" + (force ? " (force)" : ""));
+            log("[" + mode + "] irium-agent 0.7.0 bootstrapping" + (force ? " (force)" : ""));
             // M7-B8 : warmup AVANT TOUT — les classes partagées agent/client (Gson,
             // Formatter) doivent être définies par NOUS en premier, sinon course
             // avec la thread Render (ClassCircularityError, 2 crashes réels).
@@ -51,6 +56,31 @@ public final class IriumAgent {
                 // Dormant: not a Minecraft process. Touch nothing further.
                 log("[" + mode + "] non-Minecraft process -> dormant, no transformer registered");
                 return;
+            }
+
+            // M7-X21 Gateway : le choix se fait ICI, avant toute définition de
+            // classe MC. Classique = retour immédiat, RIEN n'est enregistré —
+            // le boot est physiquement vanilla (zéro mixin, zéro hook).
+            if (gateway && !hotAttach) {
+                if (autoChoice != null && !autoChoice.isBlank()) {
+                    if (autoChoice.startsWith("full:")) {
+                        String srv = autoChoice.substring("full:".length());
+                        dev.irium.agent.module.BootChooser.forceFull(srv);
+                        log("[gateway] choix auto: EXPÉRIENCE COMPLÈTE (" + srv + ")");
+                    } else {
+                        log("[gateway] choix auto: instance classique");
+                        return; // dormant total pour ce boot
+                    }
+                } else {
+                    dev.irium.agent.module.BootChooser.chooseBlocking();
+                    if (!dev.irium.agent.module.BootChooser.wantsFullBoot()) {
+                        log("[gateway] instance classique -> agent dormant pour ce boot");
+                        return; // dormant total pour ce boot
+                    }
+                }
+                // Full : armer le modset du serveur choisi AVANT toute classe MC.
+                args = "boot:" + dev.irium.agent.module.BootChooser.server();
+                bootArm = true;
             }
 
             log("[" + mode + "] Minecraft detected -> registering netty hook (M3) + observation transformer");
@@ -67,12 +97,10 @@ public final class IriumAgent {
             // appendToSystemClassLoaderSearch).
             if (bootArm) {
                 dev.irium.agent.module.FabricModHost.armForBoot(args);
-            } else if (hotAttach) {
-                // M7-B7 : attach à chaud SANS arg boot: (watcher). Si le watcher a
-                // attrapé le process tôt, les classes MC ne sont pas encore définies
-                // -> armer depuis le cache = transform à la définition, zéro restart.
-                dev.irium.agent.module.FabricModHost.armFromCache();
             }
+            // M7-X21 : plus de shadow-arm à l'attach — la physique M7-X19 a
+            // tranché (classes déjà chargées = mixins impossible). Le Gateway
+            // premain est LE chemin d'armement des mods.
             if (hotAttach) {
                 // client déjà lancé : netty est déjà chargé, on le retransforme
                 // pour que les PROCHAINES connexions installent le tap.

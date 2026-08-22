@@ -100,6 +100,39 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
     /** Re-fire JOIN après l'installation tardive d'un mod streamé. */
     public static void fireJoinLate() { fireJoin(); }
 
+    /** M7-X20 : payloads bufferisés (gate fermée) -> rejoués vers les mods à l'ouverture. */
+    public static void flushPendingPayloads() {
+        java.util.List<Object[]> drained;
+        synchronized (PENDING_PAYLOADS) {
+            drained = new java.util.ArrayList<>(PENDING_PAYLOADS);
+            PENDING_PAYLOADS.clear();
+        }
+        for (Object[] p : drained) {
+            String chan = (String) p[0];
+            byte[] body = (byte[]) p[1];
+            try {
+                net.minecraft.resources.Identifier id = net.minecraft.resources.Identifier.parse(chan);
+                net.fabricmc.fabric.impl.client.networking.ClientNetworkingImpl.dispatch(id, body);
+            } catch (Throwable ignored) {}
+        }
+        if (!drained.isEmpty()) IriumAgent.log("[tap] " + drained.size() + " payload(s) rejoué(s) après MODSET");
+    }
+
+    /** M7-X20 : un JOIN a été suspendu (gate fermée) puis le MODSET est arrivé -> le tirer maintenant. */
+    public static void fireSuppressedJoin() {
+        if (!joinSuppressed) return;
+        IriumAgent.log("[tap] MODSET reçu après le JOIN -> JOIN rétroactif (gate ouverte)");
+        fireJoin();
+    }
+
+    private static final java.util.concurrent.atomic.AtomicBoolean SELFTESTS_DONE = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    // M7-X20 : payloads mods arrivés AVANT le MODSET (gate fermée) -> bufferisés
+    // puis rejoués à l'ouverture. Un serveur non-Irium ne les voit jamais rejoués
+    // (la gate reste fermée, le buffer meurt avec le canal).
+    private static final java.util.List<Object[]> PENDING_PAYLOADS = new java.util.ArrayList<>();
+    private static volatile boolean joinSuppressed;
+
     /**
      * M7-B11c : self-test Mod Menu — reproduit le crash user (clic bouton Mods :
      * ModsScreen.init -> ModListWidget.filter -> updateSelectedEntry ->
@@ -108,6 +141,7 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
      */
     public static void selfTestModsScreen() {
         if (!Boolean.getBoolean("irium.test.modsscreen")) return;
+        if (SELFTESTS_DONE.getAndSet(true)) return; // une fois par JVM (M7-X20)
         Thread t = new Thread(() -> {
             try {
                 Thread.sleep(6000); // laisser le HUD/minimap s'installer
@@ -143,6 +177,7 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
      */
     public static void selfTestRejoin() {
         if (!Boolean.getBoolean("irium.test.rejoin")) return;
+        if (SELFTESTS_DONE.getAndSet(true)) return; // une fois par JVM (M7-X20)
         Thread t = new Thread(() -> {
             try {
                 Thread.sleep(12000); // laisser le 1er join finir d'installer (+ self-test ModsScreen 3s)
@@ -175,13 +210,24 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         dev.irium.agent.module.ModuleManager.close(ctx.channel()); // sandbox : tout retombe
         if (CURRENT.compareAndSet(ctx.channel(), null)) {
-            fireDisconnect();
+            fireDisconnect();      // M7-X20 : gate encore ouverte -> fabric DISCONNECT tire
+            dev.irium.agent.module.SessionGate.end(); // puis surfaces muettes -> vanilla à l'œil
         }
         super.channelInactive(ctx);
     }
 
     /** Fabric JOIN/DISCONNECT — portés par le tap, jamais d'exception. */
     public static void fireJoin() {
+        // M7-X20 : hors session Irium (pas de MODSET), les mods armés restent
+        // muets — pas de fabric JOIN vers un serveur non-Irium. Le JOIN est
+        // rétroactif : si le MODSET arrive juste après (c'est le cas — il vient
+        // après notre register), SessionGate.begin() re-tire ce JOIN.
+        if (!dev.irium.agent.module.SessionGate.isActive()) {
+            joinSuppressed = true;
+            IriumAgent.log("[tap] JOIN sur serveur non (encore) Irium -> JOIN suspendu (shadow-arm)");
+            return;
+        }
+        joinSuppressed = false;
         selfTestModsScreen();
         selfTestRejoin();
         try {
@@ -192,7 +238,11 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
     }
 
     public static void fireDisconnect() {
+        // M7-X20 : plus de relance vanilla (supprimée M7-X19bis) — la sortie
+        // propre est le silence : SessionGate ferme les surfaces, le titre
+        // redevient vanilla à l'œil, sans tuer le process.
         try {
+            if (!dev.irium.agent.module.SessionGate.isActive()) return;
             Object invoker = net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.DISCONNECT.invoker();
             if (invoker != null) ((net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.Disconnect) invoker)
                     .onPlayDisconnect(null, null, net.minecraft.client.Minecraft.getInstance());
@@ -282,7 +332,22 @@ public final class IriumTap extends ChannelInboundHandlerAdapter {
             return;
         }
         // M7-B : dispatch des custom_payload vers les mods Fabric streamés
+        // M7-X20 : gated — hors session Irium, les mods ne voient AUCUN payload
+        // tiers. EXCEPTION : le CHALLENGE irium:hello (canal Irium, traité plus
+        // bas) passe TOUJOURS — c'est lui qui prouve le serveur et ouvre la
+        // session. Si le MODSET n'est pas encore arrivé, on BUFFERISE les
+        // payloads tiers : rejoués à l'ouverture (SVC request_secret court).
         try {
+            boolean isIriumChannel = chan.startsWith("irium:");
+            if (!isIriumChannel && !dev.irium.agent.module.SessionGate.isActive()) {
+                if (!dev.irium.agent.module.SessionGate.mayOpen()) {
+                    return; // serveur non-Irium : gate fermée pour de bon
+                }
+                synchronized (PENDING_PAYLOADS) {
+                    if (PENDING_PAYLOADS.size() < 64) PENDING_PAYLOADS.add(new Object[]{chan, d.readBytes(d.readableBytes())});
+                }
+                return;
+            }
             net.minecraft.resources.Identifier id = net.minecraft.resources.Identifier.parse(chan);
             if (!chan.startsWith("irium:") && !chan.equals("minecraft:register")
                     && !chan.equals("minecraft:unregister")) {
